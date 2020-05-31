@@ -1,0 +1,1502 @@
+// Interaction is copied from
+// https://developers.google.com/earth-engine/tutorials/community/drawing-tools-region-reduction
+
+var codes = ['AC01', 'AC03', 'AC04', 'AC05', 'AC06', 'AC07', 'AC09', 'AC10', 'AC14', 'AC15', 'AC16', 'AC17', 'AC18', 'AC19', 'AC20', 'AC22', 'AC23', 'AC24', 'AC26', 'AC27', 'AC30', 'AC32', 'AC34', 'AC35', 'AC36', 'AC37', 'AC38', 'AC41', 'AC44', 'AC45', 'AC50', 'AC52', 'AC58', 'AC59', 'AC60', 'AC61', 'AC62', 'AC63', 'AC64', 'AC65', 'AC66', 'AC67', 'AC68', 'AC69', 'AC70', 'AC71', 'AC72', 'AC74', 'AC81', 'AC88', 'AC90', 'AC92', 'AC94', 'AC100', 'CA02', 'LG01', 'LG02', 'LG03', 'LG04', 'LG06', 'LG07', 'LG09', 'LG08', 'LG11', 'LG13', 'LG14', 'LG15', 'LG16', 'LG20', 'LG21', 'SR01', 'FA01', 'HE02', 'PG01', 'NA01', 'WA01', 'TC01', 'NU01', 'WO12', 'AC00', 'HEAT']
+var table = ee.FeatureCollection('users/marcyinfeng/UK_crop_type_2018')
+
+var SIAC = require('users/marcyinfeng/utils/:/SIAC')
+var smoother = require('users/marcyinfeng/utils:smoother')
+var non_uniform_smoother = require('users/marcyinfeng/utils:non_uniform_smoother')
+var palettes = require('users/gena/packages:palettes');
+
+var step = ee.Number(12)
+var year = '2019'
+var buff_size = 20
+
+var nceo_logo = ee.Image("users/marcyinfeng/NCEO_logo");
+var ucl_logo = ee.Image("users/marcyinfeng/UCL_logo");
+
+// var nceo_logo = ui.Thumbnail({image:nceo_logo,
+//                               params:{bands:['b1','b2','b3'],min:0,max:255, dimensions: '1000x227'},
+//                               style:{width:'276.5px',height:'62.7655px',position: 'bottom-left'}});
+// var ucl_logo  = ui.Thumbnail({image: ucl_logo,
+//                               params:{bands:['b1','b2','b3'],min:0,max:255, dimensions:'553x162'},
+//                               style:{width:'276.5px',height:'81px', position: 'bottom-left'}});
+
+var nceo_logo = ui.Thumbnail({image:nceo_logo,
+                              params:{bands:['b1','b2','b3'],min:0,max:255, dimensions: '1000x227'},
+                              style:{width:'140px',
+                                     height:'45px',
+                                     position: 'top-right',
+                                     backgroundColor: '#FF000000'
+                              }});
+var ucl_logo  = ui.Thumbnail({image: ucl_logo,
+                              params:{bands:['b1','b2','b3'],min:0,max:255, dimensions:'553x162'},
+                              style:{width:'117px',
+                                     height:'45px', 
+                                     position: 'top-left',
+                                     backgroundColor: '#FF000000'
+                              }});
+
+var logo_panel = ui.Panel({
+      widgets: [ucl_logo, nceo_logo], 
+  style: {position: 'bottom-center',
+          border: 0,
+          // color: ,
+          height: '80px',
+          width: '320px',
+          // stretch: 'vertical',// ('horizontal', 'vertical', 'both')
+          backgroundColor: '#FF000000',
+  },
+  layout: ui.Panel.Layout.absolute()
+})
+var image1 = ee.Image('users/uclgeogeo/EastAnglia_2020_0_0_bio_paras')
+var image2 = ee.Image('users/uclgeogeo/EastAnglia_2020_0_1_bio_paras')
+var image3 = ee.Image('users/uclgeogeo/EastAnglia_2020_0_2_bio_paras')
+var image4 = ee.Image('users/uclgeogeo/EastAnglia_2020_0_3_bio_paras')
+var image5 = ee.Image('users/uclgeogeo/EastAnglia_2020_1_0_bio_paras')
+var image6 = ee.Image('users/uclgeogeo/EastAnglia_2020_1_1_bio_paras')
+var image7 = ee.Image('users/uclgeogeo/EastAnglia_2020_1_2_bio_paras')
+var image8 = ee.Image('users/uclgeogeo/EastAnglia_2020_1_3_bio_paras')
+var image9 = ee.Image('users/uclgeogeo/EastAnglia_2020_2_0_bio_paras')
+var image10 = ee.Image('users/uclgeogeo/EastAnglia_2020_2_1_bio_paras')
+var image11 = ee.Image('users/uclgeogeo/EastAnglia_2020_2_2_bio_paras')
+var image12 = ee.Image('users/uclgeogeo/EastAnglia_2020_2_3_bio_paras')
+var image13 = ee.Image('users/uclgeogeo/EastAnglia_2020_3_0_bio_paras')
+var image14 = ee.Image('users/uclgeogeo/EastAnglia_2020_3_1_bio_paras')
+var image15 = ee.Image('users/uclgeogeo/EastAnglia_2020_3_2_bio_paras')
+var image16 = ee.Image('users/uclgeogeo/EastAnglia_2020_3_3_bio_paras')
+
+var EastAnglia_2020 = ee.ImageCollection.fromImages([image1, image2, image3, image4, image5, 
+                                                     image6, image7, image8, image9, image10,
+                                                     image11, image12, image13, image14, image15, image16]).median()
+                                                     
+var image1 = ee.Image('users/marcyinfeng/EastAnglia_2019_1_1_bio_paras')
+var image2 = ee.Image('users/marcyinfeng/EastAnglia_2019_1_2_bio_paras')
+var image3 = ee.Image('users/marcyinfeng/EastAnglia_2019_1_3_bio_paras')
+var image4 = ee.Image('users/marcyinfeng/EastAnglia_2019_2_0_bio_paras')
+var image5 = ee.Image('users/marcyinfeng/EastAnglia_2019_2_1_bio_paras')
+var image6 = ee.Image('users/uclgeogeo/EastAnglia_2019_2_2_bio_paras')
+var image7 = ee.Image('users/uclgeogeo/EastAnglia_2019_2_3_bio_paras')
+var image8 = ee.Image('users/uclgeogeo/EastAnglia_2019_3_0_bio_paras')
+var image9 = ee.Image('users/uclgeogeo/EastAnglia_2019_3_1_bio_paras')
+var image10 = ee.Image('users/uclgeogeo/EastAnglia_2019_3_2_bio_paras')
+var image11 = ee.Image('users/uclgeogeo/EastAnglia_2019_3_3_bio_paras')
+var image12 = ee.Image('users/marcyinfeng/EastAnglia_2019_0_0_bio_paras')
+var image13 = ee.Image('users/marcyinfeng/EastAnglia_2019_0_1_bio_paras')
+var image14 = ee.Image('users/marcyinfeng/EastAnglia_2019_0_2_bio_paras')
+var image15 = ee.Image('users/marcyinfeng/EastAnglia_2019_0_3_bio_paras')
+var image16 = ee.Image('users/marcyinfeng/EastAnglia_2019_1_0_bio_paras')
+
+var EastAnglia_2019 = ee.ImageCollection.fromImages([image1, image2, image3, image4, image5, 
+                                                     image6, image7, image8, image9, image10,
+                                                     image11, image12, image13, image14, image15, image16]).median()
+
+
+var image1 = ee.Image('users/marcyinfeng/EastAnglia_2018_2_2_bio_paras')
+var image2 = ee.Image('users/marcyinfeng/EastAnglia_2018_2_1_bio_paras')
+var image3 = ee.Image('users/marcyinfeng/EastAnglia_2018_2_0_bio_paras')
+
+var image4 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_0_0_0_bio_paras')
+var image5 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_0_0_1_bio_paras')
+var image6 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_0_1_0_bio_paras')
+var image7 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_0_1_1_bio_paras')
+
+var image8 = ee.Image('users/marcyinfeng/EastAnglia_2018_1_0_bio_paras')
+var image9 = ee.Image('users/marcyinfeng/EastAnglia_2018_1_2_bio_paras')
+
+var image10 = ee.Image('users/uclgeogeo/EastAnglia_2018_1_0_0_1_bio_paras')
+var image11 = ee.Image('users/uclgeogeo/EastAnglia_2018_1_1_0_0_bio_paras')
+var image12 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_1_0_0_bio_paras')
+var image13 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_1_0_0_bio_paras')
+
+var image14 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_1_1_1_bio_paras')
+var image15 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_1_0_1_bio_paras')
+var image16 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_1_1_0_bio_paras')
+
+var EastAnglia_2018 = ee.ImageCollection.fromImages([image1, image2, image3, image4, image5, 
+                                                     image6, image7, image8, image9, image10,
+                                                     image11, image12, image13, image14, image15, image16]).median()
+
+// var image1 = ee.Image('users/marcyinfeng/EastAnglia_2017_0_0_bio_paras')
+// var image2 = ee.Image('users/marcyinfeng/EastAnglia_2017_0_1_bio_paras')
+// var image3 = ee.Image('users/marcyinfeng/EastAnglia_2017_1_0_bio_paras')
+// var image4 = ee.Image('users/marcyinfeng/EastAnglia_2017_1_1_bio_paras')
+// var EastAnglia_2017 = ee.ImageCollection.fromImages([image1, image2, image3, image4]).median()
+
+
+// var image1 = ee.Image('users/marcyinfeng/EastAnglia_2016_0_0_0_0_bio_paras')
+// var image2 = ee.Image('users/marcyinfeng/EastAnglia_2016_0_0_0_1_bio_paras')
+// var image3 = ee.Image('users/marcyinfeng/EastAnglia_2016_0_0_1_0_bio_paras')
+// var image4 = ee.Image('users/marcyinfeng/EastAnglia_2016_0_0_1_1_bio_paras')
+// var image5 = ee.Image('users/marcyinfeng/EastAnglia_2016_0_1_bio_paras')
+// var image6 = ee.Image('users/marcyinfeng/EastAnglia_2016_1_0_bio_paras')
+// var image7 = ee.Image('users/marcyinfeng/EastAnglia_2016_1_1_bio_paras')
+// var EastAnglia_2016 = ee.ImageCollection.fromImages([ image1, image2, image3, image4, image5, image6, image7]).median()
+
+var image1 = ee.Image('users/marcyinfeng/EastAnglia_2016_0_0_bio_paras_new')
+var image2 = ee.Image('users/marcyinfeng/EastAnglia_2016_0_1_bio_paras_new')
+var image3 = ee.Image('users/marcyinfeng/EastAnglia_2016_0_2_bio_paras_new')
+var image4 = ee.Image('users/marcyinfeng/EastAnglia_2016_0_3_bio_paras_new')
+var image5 = ee.Image('users/marcyinfeng/EastAnglia_2016_1_0_bio_paras_new')
+var image6 = ee.Image('users/marcyinfeng/EastAnglia_2016_1_1_bio_paras_new')
+var image7 = ee.Image('users/marcyinfeng/EastAnglia_2016_1_2_bio_paras_new')
+var image8 = ee.Image('users/marcyinfeng/EastAnglia_2016_1_3_bio_paras_new')
+var image9 = ee.Image('users/marcyinfeng/EastAnglia_2016_2_0_bio_paras_new')
+var image10 = ee.Image('users/marcyinfeng/EastAnglia_2016_2_1_bio_paras_new')
+var image11 = ee.Image('users/marcyinfeng/EastAnglia_2016_2_2_bio_paras_new')
+var image12 = ee.Image('users/marcyinfeng/EastAnglia_2016_2_3_bio_paras_new')
+var image13 = ee.Image('users/marcyinfeng/EastAnglia_2016_3_0_bio_paras_new')
+var image14 = ee.Image('users/marcyinfeng/EastAnglia_2016_3_1_bio_paras_new')
+var image15 = ee.Image('users/marcyinfeng/EastAnglia_2016_3_2_bio_paras_new')
+var image16 = ee.Image('users/marcyinfeng/EastAnglia_2016_3_3_bio_paras_new')
+
+var EastAnglia_2016 = ee.ImageCollection.fromImages([image1, image2, image3, image4,
+                                                    image5, image6, image7, image8,
+                                                    image9, image10, image11, image12,
+                                                    image13, image14, image15, image16,]).median()
+
+var image1 = ee.Image('users/uclgeogeo/EastAnglia_2017_0_0_bio_paras_new')
+var image2 = ee.Image('users/uclgeogeo/EastAnglia_2017_0_1_bio_paras_new')
+var image3 = ee.Image('users/uclgeogeo/EastAnglia_2017_0_2_bio_paras_new')
+var image4 = ee.Image('users/uclgeogeo/EastAnglia_2017_0_3_bio_paras_new')
+var image5 = ee.Image('users/uclgeogeo/EastAnglia_2017_1_0_bio_paras_new')
+var image6 = ee.Image('users/uclgeogeo/EastAnglia_2017_1_1_bio_paras_new')
+var image7 = ee.Image('users/uclgeogeo/EastAnglia_2017_1_2_bio_paras_new')
+var image8 = ee.Image('users/uclgeogeo/EastAnglia_2017_1_3_bio_paras_new')
+var image9 = ee.Image('users/uclgeogeo/EastAnglia_2017_2_0_bio_paras_new')
+var image10 = ee.Image('users/uclgeogeo/EastAnglia_2017_2_1_bio_paras_new')
+var image11 = ee.Image('users/uclgeogeo/EastAnglia_2017_2_2_bio_paras_new')
+var image12 = ee.Image('users/uclgeogeo/EastAnglia_2017_2_3_bio_paras_new')
+var image13 = ee.Image('users/uclgeogeo/EastAnglia_2017_3_0_bio_paras_new')
+var image14 = ee.Image('users/uclgeogeo/EastAnglia_2017_3_1_bio_paras_new')
+var image15 = ee.Image('users/uclgeogeo/EastAnglia_2017_3_2_bio_paras_new')
+var image16 = ee.Image('users/uclgeogeo/EastAnglia_2017_3_3_bio_paras_new')
+
+var EastAnglia_2017 = ee.ImageCollection.fromImages([image1, image2, image3, image4,
+                                                    image5, image6, image7, image8,
+                                                    image9, image10, image11, image12,
+                                                    image13, image14, image15, image16,]).median()
+
+var cm1 = ee.Image('users/marcyinfeng/Crop_Map_of_England_2019_Cambridgeshire')
+var cm2 = ee.Image('users/marcyinfeng/Crop_Map_of_England_2019_Norfolk')
+var cm3 = ee.Image('users/marcyinfeng/Crop_Map_of_England_2019_Suffolk')
+var cm2019 = ee.ImageCollection.fromImages([cm1, cm2, cm3]).median()
+
+var cm1 = ee.Image('users/marcyinfeng/Crop_Map_of_England_2018_Cambridgeshire')
+var cm2 = ee.Image('users/marcyinfeng/Crop_Map_of_England_2018_Suffolk')
+var cm3 = ee.Image('users/marcyinfeng/Crop_Map_of_England_2018_Norfolk')
+
+var cm2018 = ee.ImageCollection.fromImages([cm1, cm2, cm3]).median()
+
+var cm4 = ee.Image('users/marcyinfeng/Crop_Map_of_England_2017_Cambridgeshire')
+var cm5 = ee.Image('users/marcyinfeng/Crop_Map_of_England_2017_Suffolk')
+var cm6 = ee.Image('users/marcyinfeng/Crop_Map_of_England_2017_Norfolk')
+
+var cm2017 = ee.ImageCollection.fromImages([cm4, cm5, cm6]).median()
+
+var cm7 = ee.Image('users/marcyinfeng/Crop_Map_of_England_2016_Cambridgeshire')
+var cm8 = ee.Image('users/marcyinfeng/Crop_Map_of_England_2016_Suffolk')
+var cm9 = ee.Image('users/marcyinfeng/Crop_Map_of_England_2016_Norfolk')
+
+var cm2016 = ee.ImageCollection.fromImages([cm7, cm8, cm9]).median()
+
+var same_crop_mask = (cm2018.eq(cm2017)).and(cm2018.eq(cm2016)).and(cm2018.eq(cm2019))
+var same_crop = cm2018.updateMask(same_crop_mask.eq(1))
+
+
+ui.root.clear();
+var Map = ui.Map();
+
+var add_lai_to_map = function(){
+  var bn = EastAnglia_2020.bandNames()
+  var ind = 0
+  
+  var year = '2020'
+  var scale_factor = 1000
+  var parameter = 'lai'
+  
+  var obs = EastAnglia_2020.select(ee.List.sequence(ind, bn.length().subtract(1), 4))
+  var max_doy = obs.bandNames().length().subtract(1).multiply(8).add(4)
+  var max_doy_2020 = obs.bandNames().length().subtract(3).multiply(8).add(4)
+  max_doy = ee.Algorithms.If(ee.String(year).compareTo('2020').eq(0), max_doy_2020, max_doy)
+  var doy = ee.List.sequence(4, max_doy, 8)
+  var to_col = function(ii){
+    ii = ee.Number(ii).int()
+    var value = doy.get(ii)
+    
+    var start_date = ee.Date(ee.String(year).cat(ee.String('-01-01')))
+    var image_date = start_date.advance(ee.Number(value).int(), 'day')
+    // var image = obs.filterDate(image_date, image_date.advance(1, 'day')).mean()
+    var time_start = image_date.millis()
+    
+    var image = obs.select(ii)
+                   .divide(scale_factor)
+                   .rename(parameter)
+                   .set('system:time_start', time_start)
+    return image
+    
+  }
+  var mobs = ee.List.sequence(0, doy.length().subtract(1)).map(to_col)
+  var mobs = ee.ImageCollection.fromImages(mobs)
+  var sobs = smoother.smoother(mobs, 0.5, 2, 1).select(['smoothed'], ['lai'])
+  var palette = palettes.colorbrewer.YlGn[9];
+  var mask = cm2019.mask()
+  var latest_lai = ee.Image(sobs.toList(1, sobs.size().subtract(1)).get(0))
+  Map.addLayer(latest_lai.updateMask(mask.eq(1)), {max:6, min:0, palette: palette}, 'Latest LAI', false)
+}
+add_lai_to_map()
+
+Map.addLayer(same_crop_mask.updateMask(same_crop_mask.eq(1)), {palette: '#2e84d5', opacity: 0.4}, 'Same crops')
+// "ROADMAP", "SATELLITE", "HYBRID", or "TERRAIN"
+Map.setOptions("HYBRID")
+
+Map.setCenter(1.0325, 52.6596, 10)
+
+var drawingTools = Map.drawingTools();
+drawingTools.setShown(false);
+
+while (drawingTools.layers().length() > 0) {
+  var layer = drawingTools.layers().get(0);
+  drawingTools.layers().remove(layer);
+}
+
+var dummyGeometry =
+    ui.Map.GeometryLayer({geometries: null, name: 'geometry', color: '23cba7'});
+
+drawingTools.layers().add(dummyGeometry);
+
+function clearGeometry() {
+  var layers = drawingTools.layers();
+  layers.get(0).geometries().remove(layers.get(0).geometries().get(0));
+}
+
+function drawRectangle() {
+  clearGeometry();
+  drawingTools.setShape('rectangle');
+  
+  var layers = drawingTools.layers();
+  layers.get(0).setColor('#008744')
+  
+  drawingTools.draw();
+}
+
+function drawPolygon() {
+  clearGeometry();
+  drawingTools.setShape('polygon');
+  
+  var layers = drawingTools.layers();
+  layers.get(0).setColor('#0057e7')
+  
+  drawingTools.draw();
+}
+
+
+
+function drawPoint() {
+  clearGeometry();
+  drawingTools.setShape('point');
+  
+  var layers = drawingTools.layers();
+  layers.get(0).setColor('#d62d20')
+  
+  drawingTools.draw();
+}
+
+var chartPanel = ui.Panel({
+  style:
+      {height: '760px', width: '600px', 
+       position: 'bottom-right', 
+       shown: false, 
+       backgroundColor: '#FF000000',
+      // opacity:0.5,
+      }
+});
+
+
+var symbol = {
+  rectangle: '▭',
+  polygon: '⏢',
+  point: '📍',
+};
+
+var poly_panel = ui.Panel({
+      widgets: [ui.Button({
+                  label: symbol.rectangle ,//+ ' Rectangle',
+                  onClick: drawRectangle,
+                  style: {position: 'top-left', backgroundColor: '#FF000000',}
+                }),
+                ui.Button({
+                  label: symbol.polygon ,//+ ' Polygon',
+                  onClick: drawPolygon,
+                  style: {position: 'top-center', backgroundColor: '#FF000000',}
+                }),
+                ui.Button({
+                  label: symbol.point ,//+ ' Point',
+                  onClick: drawPoint,
+                  style: {position: 'top-right', backgroundColor: '#FF000000',}
+                })], 
+  style: {position: 'top-left',
+          fontFamily: 'Sans-serif',
+          border: 0,
+          // color: ,
+          height: '80px',
+          width: '320px',
+          // stretch: 'vertical',// ('horizontal', 'vertical', 'both')
+          backgroundColor: '#FF000000',
+  },
+  layout: ui.Panel.Layout.absolute()
+})
+
+var hide_panel = ui.Panel({
+  widgets: [
+    ui.Label('Usage: ', 
+      {whiteSpace: 'pre',  
+      position: 'bottom-left',
+      fontFamily: 'Sans-serif',
+      border: 1,
+      fontSize:  '24px',
+      fontWeight: 'bold',
+      // color: ,
+      backgroundColor: '#FF000000',
+          
+        }),
+    ui.Button({
+              label: '❮❮',
+              onClick: hide_control,
+              style: {position: 'bottom-right', 
+                      fontSize:  '24px',
+                      fontWeight: 'bold',
+                      //stretch: 'horizontal'
+                      backgroundColor: '#FF000000',
+              }})
+      ], 
+  style: {position: 'top-left',
+          fontFamily: 'Sans-serif',
+          border: 0,
+          // color: ,
+          height: '60px',
+          // width: '320px',
+          stretch: 'horizontal',// ('horizontal', 'vertical', 'both')
+          backgroundColor: '#FF000000',
+  },
+  layout: ui.Panel.Layout.absolute()
+})
+
+            
+var controlPanel = ui.Panel({
+  widgets: [
+     hide_panel, 
+    ui.Label('1. Select a drawing mode: ', 
+      {whiteSpace: 'pre',  
+      position: 'bottom-left',
+      fontFamily: 'Sans-serif',
+      border: 1,
+      // color: ,
+      backgroundColor: '#FF000000',
+          
+        }),
+
+
+    poly_panel, 
+    ui.Label('2. Draw a geometry.',
+      {whiteSpace: 'pre',  
+       position: 'bottom-left',
+        fontFamily: 'Sans-serif',
+        border: 1,
+        // color: ,
+        backgroundColor: '#FF000000',
+          
+        }),
+    ui.Label('3. Wait for chart to render.',
+        {whiteSpace: 'pre',  
+        position: 'bottom-left',
+        fontFamily: 'Sans-serif',
+        border: 1,
+        // color: ,
+        backgroundColor: '#FF000000'
+          
+        }),
+    ui.Label(
+        '4. Repeat 1-3 or edit/move geometry for a new chart.',
+        {
+        // whiteSpace: 'pre',  
+        position: 'bottom-left',
+        fontFamily: 'Sans-serif',
+        border: '1',
+        fontWeight: 'bold',
+        color: '#ed1c24',
+        backgroundColor: '#FF000000', 
+        }),
+        
+    ui.Label('This GEE App is a prototype of the next generation crop production monitoring  and forecasting system with Sentinel data, designed and developed by UCL EO team.', 
+      {//whiteSpace: 'pre',  
+      position: 'bottom-left',
+      fontFamily: 'Sans-serif',
+      // fontSize:  '24px',
+      // fontWeight: 'bold',
+      // border: 1,
+      // color: ,
+      backgroundColor: '#FF000000',
+          
+        }),
+      // ui.Label('The system mainly consist of three part, AC for Sentinel 2 measurements by SIAC, biophysical parameter retrieval from satellite images with Neural Network, and lastly the yield prediction with ensembles from WOFOST model using LAI as input.', 
+      // {//whiteSpace: 'pre',  
+      // position: 'bottom-left',
+      // fontFamily: 'Sans-serif',
+      // // fontSize:  '24px',
+      // // fontWeight: 'bold',
+      // // border: 1,
+      // // color: ,
+      // backgroundColor: '#FF000000',
+          
+      //   }),
+    ui.Label('Here we have processed five years (2016-2020) of Sentinel 2 data for East Anglia, UK, and provide users a direct visualisation of crop grow status and crop planting type in each year over individual fields', 
+      {//whiteSpace: 'pre',  
+      position: 'bottom-left',
+      fontFamily: 'Sans-serif',
+      // fontSize:  '24px',
+      // fontWeight: 'bold',
+      // border: 1,
+      // color: ,
+      backgroundColor: '#FF000000',
+          
+        }),
+    ui.Label('For more information about this project, please refer to: ', 
+      {//whiteSpace: 'pre',  
+      position: 'bottom-left',
+      fontFamily: 'Sans-serif',
+      // fontSize:  '24px',
+      // fontWeight: 'bold',
+      // border: 1,
+      // color: ,
+      backgroundColor: '#FF000000',
+          
+        }),
+    ui.Label({
+      value:"Sentinel of wheat ",
+      style:{
+      position: 'bottom-left',
+      fontFamily: 'Sans-serif',
+      // fontSize:  '24px',
+      // fontWeight: 'bold',
+      // border: 1,
+      // color: ,
+      backgroundColor: '#FF000000',
+      },
+      targetUrl:"https://www.geog.ucl.ac.uk/research/research-projects/sentinels-of-wheat"
+      }),
+    
+    ui.Label('Sentinel 2 atmospheric correction processor:', 
+      {//whiteSpace: 'pre',  
+      position: 'bottom-left',
+      fontFamily: 'Sans-serif',
+      // fontSize:  '24px',
+      // fontWeight: 'bold',
+      // border: 1,
+      // color: ,
+      backgroundColor: '#FF000000',
+          
+        }),
+    ui.Label({
+      value:"SIAC ",
+      style:{
+      position: 'bottom-left',
+      fontFamily: 'Sans-serif',
+      // fontSize:  '24px',
+      // fontWeight: 'bold',
+      // border: 1,
+      // color: ,
+      backgroundColor: '#FF000000',
+      },
+      targetUrl:"https://github.com/MarcYin/SIAC"
+      }),
+    ui.Label('The Crop classification map is from:',
+    {//whiteSpace: 'pre',  
+      position: 'bottom-left',
+      fontFamily: 'Sans-serif',
+      // fontSize:  '24px',
+      // fontWeight: 'bold',
+      // border: 1,
+      // color: ,
+      backgroundColor: '#FF000000',
+          
+        }),
+
+    ui.Label({
+      value:"Crop Map of England (CROME) ",
+      style:{
+      position: 'bottom-left',
+      fontFamily: 'Sans-serif',
+      // fontSize:  '24px',
+      // fontWeight: 'bold',
+      // border: 1,
+      // color: ,
+      backgroundColor: '#FF000000',
+      },
+      targetUrl:"https://data.gov.uk/dataset/fb19d34f-59e6-48e7-820a-fe5fda3019e5/crop-map-of-england-crome-2018"
+      }),
+    // ucl_logo, nceo_logo,
+  ui.Label('Feng Yin\nDepartment of Geography, UCL\nEmail: ucfafyi@ucl.ac.uk',
+    {whiteSpace: 'pre',  
+      position: 'bottom-left',
+      fontFamily: 'Sans-serif',
+      // fontSize:  '24px',
+      // fontWeight: 'bold',
+      // border: 1,
+      // color: ,
+      backgroundColor: '#FF000000',
+          
+        }),
+  ],
+  style: {position: 'top-left',
+          fontFamily: 'Sans-serif',
+          border: 1,
+          // color: ,
+          height: '600px',
+          width: '320px',
+          // stretch: 'vertical',// ('horizontal', 'vertical', 'both')
+          backgroundColor: '#ffffffE6',
+  },
+  layout: null,
+  
+});
+
+var show_button =  ui.Button({
+            label: '❯❯',
+            onClick: show_control,
+            style: {position: 'top-left', 
+                    fontSize:  '24px',
+                    fontWeight: 'bold',
+                    //stretch: 'horizontal'
+                    backgroundColor: '#FF000000',
+            }})
+              
+function hide_control(){
+    // chartPanel.style().set('shown', true);
+    Map.remove(controlPanel)
+    Map.add(show_button)
+ }
+function show_control(){
+    // chartPanel.style().set('shown', true);
+    Map.add(controlPanel)
+     Map.remove(show_button)
+ }
+
+
+Map.add(chartPanel);
+Map.add(controlPanel);
+Map.add(logo_panel)
+
+var get_doy = function(image){
+  var date = image.date()
+  var start_date = ee.Date(ee.String(year).cat(ee.String('-01-01')))
+  var doy      = date.difference(start_date, 'day').int()
+  return ee.Feature(null, {'doy': doy})
+}
+
+var int2str = function(value){
+  return ee.String(ee.Number(value).int())
+}
+
+var get_year_val = function(values, doy){
+  var doy = ee.List(doy).distinct()
+  var values = doy.map(function(value){
+    var ind = doy.indexOf(value)
+    return values.get(ind)
+  })
+  var doy = ee.List(doy).map(int2str)
+  var x = ee.List.sequence(1, 365, 1).map(int2str)
+  var empty_list = ee.List.repeat([NaN], 365)
+  
+  var empty = ee.Dictionary.fromLists(x, empty_list) 
+  var good = ee.Dictionary.fromLists(doy, values)
+  var y = empty.combine(good)
+  var y = y.values(x)
+  return y
+}
+
+var get_obs = function(aoi, year, parameter){
+  // var obs = ee.ImageCollection('COPERNICUS/S2').filterDate(ee.String(year).cat(ee.String('-03-01')), ee.String(year).cat(ee.String('-10-31')))
+  //                                           .filterBounds(aoi)
+  //                                           .filterMetadata('CLOUDY_PIXEL_PERCENTAGE', 'less_than', 40)
+  //                                           // .sort('CLOUDY_PIXEL_PERCENTAGE')
+  //                                           // .limit(24)
+  //                                           .map(SIAC.s2_cloud)
+  //                                           .map(SIAC.get_sur)
+  //                                           .select(parameter)
+  //                                           .sort('system:time_start')
+  
+  // var fillGap = function(value){
+  //   var start_date = ee.Date(ee.String(year).cat(ee.String('-01-01')))
+  //   var image_date = start_date.advance(ee.Number(value).int(), 'day')
+  //   var image = obs.filterDate(image_date, image_date.advance(1, 'day')).mean()
+  //   var time_start = image_date.millis()
+  //   var start_date = image_date.advance(step.divide(-2), 'day')
+  //   var end_date   = image_date.advance(step.divide( 2), 'day')
+  //   var wobs_median = obs.filterDate(start_date, end_date).median()
+  //   var zero_image = ee.Image(0)
+  //   zero_image = zero_image.updateMask(zero_image.eq(1))
+  //   var interp_lai = ee.Algorithms.If(wobs_median.bandNames(), wobs_median, zero_image)
+  //   return ee.Image(interp_lai).float().rename(parameter).set('system:time_start', time_start)
+  // }
+  // var doy = ee.List.sequence(60, 300, step)
+  
+  // var mobs = doy.map(fillGap)
+  
+  // var doy = ee.List.sequence(4, 360, 8)
+  // var image1 = ee.Image('users/marcyinfeng/EastAnglia_2017_0_0_bio_paras')
+  // var image2 = ee.Image('users/marcyinfeng/EastAnglia_2017_0_1_bio_paras')
+  // var bn = image1.bandNames()
+  var paras = {'lai': 0,
+              'cab': 1,
+              'cw': 2,
+              'cbrown': 3,
+  }
+  var scale_factors = {'lai': 1000,
+                       'cab': 10,
+                       'cw' : 10000,
+                       'cbrown': 1000,
+  }
+  var year_paras = {'2016': EastAnglia_2016,
+                    '2017': EastAnglia_2017,
+                    '2018': EastAnglia_2018,
+                    '2019': EastAnglia_2019,
+                    '2020': EastAnglia_2020,
+  }
+  
+  var scale_factor = ee.Number(ee.Dictionary(scale_factors).get(parameter))
+  var ind = ee.Number(ee.Dictionary(paras).get(parameter))
+  
+  
+  var image = ee.Image(ee.Dictionary(year_paras).get(year))
+  var bn = image.bandNames()
+  
+  var obs = image.select(ee.List.sequence(ind, bn.length().subtract(1), 4))
+  var max_doy = obs.bandNames().length().subtract(1).multiply(8).add(4)
+  var max_doy_2020 = obs.bandNames().length().subtract(3).multiply(8).add(4)
+  max_doy = ee.Algorithms.If(ee.String(year).compareTo('2020').eq(0), max_doy_2020, max_doy)
+  
+  var doy = ee.List.sequence(4, max_doy, 8)
+  
+  var to_col = function(ii){
+    ii = ee.Number(ii).int()
+    var value = doy.get(ii)
+    
+    var start_date = ee.Date(ee.String(year).cat(ee.String('-01-01')))
+    var image_date = start_date.advance(ee.Number(value).int(), 'day')
+    // var image = obs.filterDate(image_date, image_date.advance(1, 'day')).mean()
+    var time_start = image_date.millis()
+    
+    var image = obs.select(ii)
+                   .divide(scale_factor)
+                   .rename(parameter)
+                   .set('system:time_start', time_start)
+    return image
+    
+  }
+  
+  var mobs = ee.List.sequence(0, doy.length().subtract(1)).map(to_col)
+  var mobs = ee.ImageCollection.fromImages(mobs)
+  var sobs = smoother.smoother(mobs, 0.5, 2, 1).select(['smoothed'], ['lai'])
+  
+  var mobs = mobs.map(function(image){
+      var med_val =  image.reduceRegion({                         
+                            reducer: ee.Reducer.median(),                          
+                            geometry: aoi.buffer(buff_size),                          
+                            scale: 10,                         
+                            maxPixels: 1e13                         
+                            }).values()
+      var date = image.date()
+      var start_date = ee.Date(ee.String(year).cat(ee.String('-01-01')))
+      var doy      = date.difference(start_date, 'day').int()
+    return ee.Feature(null, {'val': med_val, 'doy': doy})
+  })
+  
+  var lmobs = mobs.aggregate_array('val')
+  var lmdoy = mobs.aggregate_array('doy')
+
+  var sobs = sobs.map(function(image){
+      var med_val =  image.reduceRegion({                         
+                            reducer: ee.Reducer.median(),                          
+                            geometry: aoi.buffer(buff_size),                          
+                            scale: 10,                         
+                            maxPixels: 1e13                         
+                            }).values()
+      var date = image.date()
+      var start_date = ee.Date(ee.String(year).cat(ee.String('-01-01')))
+      var doy      = date.difference(start_date, 'day').int()
+    return ee.Feature(null, {'val': med_val, 'doy': doy})
+  })
+  var lsobs = sobs.aggregate_array('val')
+  var lsdoy = sobs.aggregate_array('doy')
+  
+  var full_doy = ee.List.sequence(4, 360, 8)
+  
+  var left = full_doy.length().subtract(doy.length())
+  var nulls = ee.List.repeat([null], left)
+  lsobs = lsobs.cat(nulls)
+  lmobs = lmobs.cat(nulls)
+
+  // var nsobs = non_uniform_smoother.smoother(obs, 0.1, 2, 2)
+  return [lsobs, full_doy, lmobs, full_doy]
+}
+
+var get_crop_type = function(aoi){
+  var code = cm2016.reduceRegion({                         
+                            reducer: ee.Reducer.mode(),                          
+                            geometry: aoi.buffer(buff_size),                          
+                            scale: 10,                         
+                            maxPixels: 1e13                         
+                            }).get('b1')
+  var lucode = ee.List(codes).get(ee.Number(code).int())
+  var feat = table.filterMetadata('LUCODE', 'equals', lucode).first()
+  var crop_type_2016 = feat.get('Land Use Description')
+  
+  var code = cm2017.reduceRegion({                         
+                            reducer: ee.Reducer.mode(),                          
+                            geometry: aoi.buffer(buff_size),                          
+                            scale: 10,                         
+                            maxPixels: 1e13                         
+                            }).get('b1')
+  var lucode = ee.List(codes).get(ee.Number(code).int())
+  var feat = table.filterMetadata('LUCODE', 'equals', lucode).first()
+  var crop_type_2017 = feat.get('Land Use Description')
+  
+  var code = cm2018.reduceRegion({                         
+                            reducer: ee.Reducer.mode(),                          
+                            geometry: aoi.buffer(buff_size),                          
+                            scale: 10,                         
+                            maxPixels: 1e13                         
+                            }).get('b1')
+  var lucode = ee.List(codes).get(ee.Number(code).int())
+  var feat = table.filterMetadata('LUCODE', 'equals', lucode).first()
+  var crop_type_2018 = feat.get('Land Use Description')
+  
+    var code = cm2019.reduceRegion({                         
+                            reducer: ee.Reducer.mode(),                          
+                            geometry: aoi.buffer(buff_size),                          
+                            scale: 10,                         
+                            maxPixels: 1e13                         
+                            }).get('b1')
+  var lucode = ee.List(codes).get(ee.Number(code).int())
+  var feat = table.filterMetadata('LUCODE', 'equals', lucode).first()
+  var crop_type_2019 = feat.get('Land Use Description')
+  
+  
+  return [crop_type_2016, crop_type_2017, crop_type_2018, crop_type_2019]
+  
+}
+// var get_aoi = function(aoi, year, 'lai', aoi){
+  
+//   var mobs = get_obs(aoi, year, 'lai')
+  
+//   var obs  = smoother.smoother(mobs, 0.1, 2, 2).select(['smoothed'], ['lai'])
+  
+//   var s2_doy = obs.map(get_doy).aggregate_array('doy')
+  
+//   var s2_date = obs.map(function(image){
+//       return ee.Feature(null, {'date': image.date()})
+//     }).aggregate_array('date')  
+    
+//   var obs = obs.toBands().reduceRegion({                         
+//                             reducer: ee.Reducer.median(),                          
+//                             geometry: aoi.buffer(buff_size),                          
+//                             scale: 10,                         
+//                             maxPixels: 1e13                         
+//                             })
+  
+//   var keys = obs.keys().map(function(value){
+//     return ee.Number.parse(ee.String(value).slice(0, -4))
+//   })
+//   obs = obs.values().sort(keys)
+  
+//   var mobs = mobs.map(function(image){
+//       var med_val =  image.reduceRegion({                         
+//                             reducer: ee.Reducer.median(),                          
+//                             geometry: aoi.buffer(buff_size),                          
+//                             scale: 10,                         
+//                             maxPixels: 1e13                         
+//                             }).values()
+//       var date = image.date()
+//       var start_date = ee.Date(ee.String(year).cat(ee.String('-01-01')))
+//       var doy      = date.difference(start_date, 'day').int()
+//     return ee.Feature(null, {'val': med_val, 'doy': doy})
+//   })
+//   var orig = mobs.aggregate_array('val')
+//   var doy = mobs.aggregate_array('doy')
+// }
+
+function chartTimeSeries() {
+  // Make the chart panel visible the first time a geometry is drawn.
+  if (!chartPanel.style().get('shown')) {
+    chartPanel.style().set('shown', true);
+  }
+
+  // Get the drawn geometry; it will define the reduction region.
+  var aoi = drawingTools.layers().get(0).getEeObject();
+
+  // Set the drawing mode back to null; turns drawing off.
+  drawingTools.setShape(null);
+
+  // Reduction scale is based on map scale to avoid memory/timeout errors.
+  var mapScale = Map.getScale();
+  var scale = mapScale > 5000 ? mapScale * 2 : 5000;
+  
+  var lai = get_obs(aoi, '2016', 'lai')
+  var slai_2016 = ee.List(ee.List(lai).get(0)) 
+  var sdoy_2016 = ee.List(ee.List(lai).get(1))
+  var mlai_2016 = ee.List(ee.List(lai).get(2))
+  var mdoy_2016 = ee.List(ee.List(lai).get(3))
+  
+  var lai = get_obs(aoi, '2017', 'lai')
+  var slai_2017 = ee.List(ee.List(lai).get(0)) 
+  var sdoy_2017 = ee.List(ee.List(lai).get(1))
+  var mlai_2017 = ee.List(ee.List(lai).get(2))
+  var mdoy_2017 = ee.List(ee.List(lai).get(3))
+  
+  var lai = get_obs(aoi, '2018', 'lai')
+  var slai_2018 = ee.List(ee.List(lai).get(0)) 
+  var sdoy_2018 = ee.List(ee.List(lai).get(1))
+  var mlai_2018 = ee.List(ee.List(lai).get(2))
+  var mdoy_2018 = ee.List(ee.List(lai).get(3))
+  
+  var lai = get_obs(aoi, '2019', 'lai')
+  var slai_2019 = ee.List(ee.List(lai).get(0)) 
+  var sdoy_2019 = ee.List(ee.List(lai).get(1))
+  var mlai_2019 = ee.List(ee.List(lai).get(2))
+  var mdoy_2019 = ee.List(ee.List(lai).get(3))
+  
+  var lai = get_obs(aoi, '2020', 'lai')
+  var slai_2020 = ee.List(ee.List(lai).get(0)) 
+  var sdoy_2020 = ee.List(ee.List(lai).get(1))
+  var mlai_2020 = ee.List(ee.List(lai).get(2))
+  var mdoy_20200 = ee.List(ee.List(lai).get(3))
+  
+  var cab = get_obs(aoi, '2016', 'cab')
+  var scab_2016 = ee.List(ee.List(cab).get(0)) 
+  var sdoy_2016 = ee.List(ee.List(cab).get(1))
+  var mcab_2016 = ee.List(ee.List(cab).get(2))
+  var mdoy_2016 = ee.List(ee.List(cab).get(3))
+  
+  var cab = get_obs(aoi, '2017', 'cab')
+  var scab_2017 = ee.List(ee.List(cab).get(0)) 
+  var sdoy_2017 = ee.List(ee.List(cab).get(1))
+  var mcab_2017 = ee.List(ee.List(cab).get(2))
+  var mdoy_2017 = ee.List(ee.List(cab).get(3))
+  
+  var cab = get_obs(aoi, '2018', 'cab')
+  var scab_2018 = ee.List(ee.List(cab).get(0)) 
+  var sdoy_2018 = ee.List(ee.List(cab).get(1))
+  var mcab_2018 = ee.List(ee.List(cab).get(2))
+  var mdoy_2018 = ee.List(ee.List(cab).get(3))
+  
+  var cab = get_obs(aoi, '2019', 'cab')
+  var scab_2019 = ee.List(ee.List(cab).get(0)) 
+  var sdoy_2019 = ee.List(ee.List(cab).get(1))
+  var mcab_2019 = ee.List(ee.List(cab).get(2))
+  var mdoy_2019 = ee.List(ee.List(cab).get(3))
+  
+  var cab = get_obs(aoi, '2020', 'cab')
+  var scab_2020 = ee.List(ee.List(cab).get(0)) 
+  var sdoy_2020 = ee.List(ee.List(cab).get(1))
+  var mcab_2020 = ee.List(ee.List(cab).get(2))
+  var mdoy_2020 = ee.List(ee.List(cab).get(3))
+  
+  var cw = get_obs(aoi, '2016', 'cw')
+  var scw_2016 = ee.List(ee.List(cw).get(0)) 
+  var sdoy_2016 = ee.List(ee.List(cw).get(1))
+  var mcw_2016 = ee.List(ee.List(cw).get(2))
+  var mdoy_2016 = ee.List(ee.List(cw).get(3))
+  
+  var cw = get_obs(aoi, '2017', 'cw')
+  var scw_2017 = ee.List(ee.List(cw).get(0)) 
+  var sdoy_2017 = ee.List(ee.List(cw).get(1))
+  var mcw_2017 = ee.List(ee.List(cw).get(2))
+  var mdoy_2017 = ee.List(ee.List(cw).get(3))
+  
+  var cw = get_obs(aoi, '2018', 'cw')
+  var scw_2018 = ee.List(ee.List(cw).get(0)) 
+  var sdoy_2018 = ee.List(ee.List(cw).get(1))
+  var mcw_2018 = ee.List(ee.List(cw).get(2))
+  var mdoy_2018 = ee.List(ee.List(cw).get(3))
+
+  var cw = get_obs(aoi, '2019', 'cw')
+  var scw_2019 = ee.List(ee.List(cw).get(0)) 
+  var sdoy_2019 = ee.List(ee.List(cw).get(1))
+  var mcw_2019 = ee.List(ee.List(cw).get(2))
+  var mdoy_2019 = ee.List(ee.List(cw).get(3))
+  
+  var cw = get_obs(aoi, '2020', 'cw')
+  var scw_2020 = ee.List(ee.List(cw).get(0)) 
+  var sdoy_2020 = ee.List(ee.List(cw).get(1))
+  var mcw_2020 = ee.List(ee.List(cw).get(2))
+  var mdoy_2020 = ee.List(ee.List(cw).get(3))
+  
+  var cbrown = get_obs(aoi, '2016', 'cbrown')
+  var scbrown_2016 = ee.List(ee.List(cbrown).get(0)) 
+  var sdoy_2016 = ee.List(ee.List(cbrown).get(1))
+  var mcbrown_2016 = ee.List(ee.List(cbrown).get(2))
+  var mdoy_2016 = ee.List(ee.List(cbrown).get(3))
+  
+  var cbrown = get_obs(aoi, '2017', 'cbrown')
+  var scbrown_2017 = ee.List(ee.List(cbrown).get(0)) 
+  var sdoy_2017 = ee.List(ee.List(cbrown).get(1))
+  var mcbrown_2017 = ee.List(ee.List(cbrown).get(2))
+  var mdoy_2017 = ee.List(ee.List(cbrown).get(3))
+  
+  var cbrown = get_obs(aoi, '2018', 'cbrown')
+  var scbrown_2018 = ee.List(ee.List(cbrown).get(0)) 
+  var sdoy_2018 = ee.List(ee.List(cbrown).get(1))
+  var mcbrown_2018 = ee.List(ee.List(cbrown).get(2))
+  var mdoy_2018 = ee.List(ee.List(cbrown).get(3))
+
+  var cbrown = get_obs(aoi, '2019', 'cbrown')
+  var scbrown_2019 = ee.List(ee.List(cbrown).get(0)) 
+  var sdoy_2019 = ee.List(ee.List(cbrown).get(1))
+  var mcbrown_2019 = ee.List(ee.List(cbrown).get(2))
+  var mdoy_2019 = ee.List(ee.List(cbrown).get(3))
+
+  var cbrown = get_obs(aoi, '2020', 'cbrown')
+  var scbrown_2020 = ee.List(ee.List(cbrown).get(0)) 
+  var sdoy_2020 = ee.List(ee.List(cbrown).get(1))
+  var mcbrown_2020 = ee.List(ee.List(cbrown).get(2))
+  var mdoy_2020 = ee.List(ee.List(cbrown).get(3))
+  
+  var crop_types = ee.List(get_crop_type(aoi))
+  
+  // var crop_type_2016, crop_type_2017, crop_type_2018
+  
+  
+  var crop_type =  ee.String('2016: ').cat(ee.String(crop_types.get(0))).cat('\n')
+              .cat(ee.String('2017: ').cat(ee.String(crop_types.get(1))).cat('\n'))
+              .cat(ee.String('2018: ').cat(ee.String(crop_types.get(2))).cat('\n'))
+              .cat(ee.String('2019: ').cat(ee.String(crop_types.get(3))).cat('\n'))
+  // var crop_type =  ee.String('2016: ').cat(ee.String(crop_types.get(0))).cat('\t')
+  //             .cat(ee.String('2017: ').cat(ee.String(crop_types.get(1))).cat('\t'))
+  //             .cat(ee.String('2018: ').cat(ee.String(crop_types.get(2))).cat('\t'))
+  //             .cat(ee.String('2019: ').cat(ee.String(crop_types.get(3))).cat('\t'))
+              
+  var lais = ee.List([mlai_2016, slai_2016, mlai_2017, slai_2017, mlai_2018, slai_2018, mlai_2019, slai_2019, mlai_2020, slai_2020])
+  
+  var cabs = ee.List([mcab_2016, scab_2016, mcab_2017, scab_2017, mcab_2018, scab_2018, mcab_2019, scab_2019, mcab_2020, scab_2020])
+  
+  var get_lai_cab = function(item){
+    var lai = ee.List(item).get(0)
+    var cab = ee.List(item).get(1)
+    var lai_cab = ee.Algorithms.If(ee.List(lai).get(0), ee.Number(ee.List(lai).get(0)).multiply(ee.Number(ee.List(cab).get(0))), null)
+    return [lai_cab]
+  }
+  
+  var mlai_mcab_2016 = mlai_2016.zip(mcab_2016)
+  mlai_mcab_2016 = mlai_mcab_2016.map(get_lai_cab)
+  
+  var mlai_mcab_2017 = mlai_2017.zip(mcab_2017)
+  mlai_mcab_2017 = mlai_mcab_2017.map(get_lai_cab)
+  
+  var mlai_mcab_2018 = mlai_2018.zip(mcab_2018)
+  mlai_mcab_2018 = mlai_mcab_2018.map(get_lai_cab)
+  
+  var mlai_mcab_2019 = mlai_2019.zip(mcab_2019)
+  mlai_mcab_2019 = mlai_mcab_2019.map(get_lai_cab)
+
+  var mlai_mcab_2020 = mlai_2020.zip(mcab_2020)
+  mlai_mcab_2020 = mlai_mcab_2020.map(get_lai_cab)
+  
+  var slai_scab_2016 = slai_2016.zip(scab_2016)
+  slai_scab_2016 = slai_scab_2016.map(get_lai_cab)
+  
+  var slai_scab_2017 = slai_2017.zip(scab_2017)
+  slai_scab_2017 = slai_scab_2017.map(get_lai_cab)
+  
+  var slai_scab_2018 = slai_2018.zip(scab_2018)
+  slai_scab_2018 = slai_scab_2018.map(get_lai_cab)
+  
+  var slai_scab_2019 = slai_2019.zip(scab_2019)
+  slai_scab_2019 = slai_scab_2019.map(get_lai_cab)
+
+  var slai_scab_2020 = slai_2020.zip(scab_2020)
+  slai_scab_2020 = slai_scab_2020.map(get_lai_cab)
+
+
+
+  var lai_cabs = ee.List([mlai_mcab_2016, slai_scab_2016, mlai_mcab_2017, slai_scab_2017, 
+                          mlai_mcab_2018, slai_scab_2018, mlai_mcab_2019, slai_scab_2019,
+                          mlai_mcab_2020, slai_scab_2020])
+  
+  var get_lai_cw = function(item){
+    var lai = ee.List(item).get(0)
+    var cw = ee.List(item).get(1)
+    var lai_cw = ee.Algorithms.If(ee.List(lai).get(0), ee.Number(ee.List(lai).get(0)).multiply(ee.Number(ee.List(cw).get(0))), null)
+    return [lai_cw]
+  }
+  
+  var mlai_mcw_2016 = mlai_2016.zip(mcw_2016)
+  mlai_mcw_2016 = mlai_mcw_2016.map(get_lai_cw)
+  
+  var mlai_mcw_2017 = mlai_2017.zip(mcw_2017)
+  mlai_mcw_2017 = mlai_mcw_2017.map(get_lai_cw)
+  
+  var mlai_mcw_2018 = mlai_2018.zip(mcw_2018)
+  mlai_mcw_2018 = mlai_mcw_2018.map(get_lai_cw)
+  
+  var mlai_mcw_2019 = mlai_2019.zip(mcw_2019)
+  mlai_mcw_2019 = mlai_mcw_2019.map(get_lai_cw)
+
+  var mlai_mcw_2020 = mlai_2020.zip(mcw_2020)
+  mlai_mcw_2020 = mlai_mcw_2020.map(get_lai_cw)
+
+  var slai_scw_2016 = slai_2016.zip(scw_2016)
+  slai_scw_2016 = slai_scw_2016.map(get_lai_cw)
+  
+  var slai_scw_2017 = slai_2017.zip(scw_2017)
+  slai_scw_2017 = slai_scw_2017.map(get_lai_cw)
+  
+  var slai_scw_2018 = slai_2018.zip(scw_2018)
+  slai_scw_2018 = slai_scw_2018.map(get_lai_cw)
+  
+  var slai_scw_2019 = slai_2019.zip(scw_2019)
+  slai_scw_2019 = slai_scw_2019.map(get_lai_cw)
+
+  var slai_scw_2020 = slai_2020.zip(scw_2020)
+  slai_scw_2020 = slai_scw_2020.map(get_lai_cw)
+  
+  var lai_cws = ee.List([mlai_mcw_2016, slai_scw_2016, mlai_mcw_2017, slai_scw_2017, 
+                        mlai_mcw_2018, slai_scw_2018, mlai_mcw_2019, slai_scw_2019,
+                        mlai_mcw_2020, slai_scw_2020])
+                          
+  var cws = ee.List([mcw_2016, scw_2016, mcw_2017, scw_2017, mcw_2018, scw_2018, mcw_2019, scw_2019, mcw_2020, scw_2020])
+  
+  var cbrowns = ee.List([mcbrown_2016, scbrown_2016, mcbrown_2017, scbrown_2017, 
+                         mcbrown_2018, scbrown_2018, mcbrown_2019, scbrown_2019,
+                         mcbrown_2020, scbrown_2020])
+  
+  
+  crop_type.evaluate(function(crop_type){
+    var chart1 = ui.Chart.array.values(lais, 1, sdoy_2018)
+                  .setSeriesNames(['2016', '2016', '2017', '2017', '2018', '2018', '2019', '2019', '2020', '2020'])
+                  .setChartType('LineChart')
+                  .setOptions({
+                    title: 'LAI', //+ crop_type, //+' in ' + year,
+                    hAxis: {'title': 'DOY', 
+                            viewWindow: {min: 0, max: 360},
+                            textStyle: {
+                              // color: '#ffffff',
+                              // fontSize: 20,
+                              // fontName: 'Arial',
+                              // bold: true,
+                              italic: true},
+                            titleTextStyle: {
+                              // color: '#ffffff',
+                              // fontSize: 16,
+                              // fontName: 'Arial',
+                              // bold: false,
+                              italic: true
+                          },
+                    },
+                    vAxis: {'title': 'LAI', 
+                            viewWindow: {min:0.0}, 
+                            textStyle: {
+                              // color: '#ffffff',
+                              // fontSize: 20,
+                              // fontName: 'Arial',
+                              // bold: true,
+                              italic: true},
+                            titleTextStyle: {
+                              // color: '#ffffff',
+                              // fontSize: 16,
+                              // fontName: 'Arial',
+                              // bold: true,
+                              italic: true
+                          },
+                      
+                    },                
+                    interpolateNulls: true,
+                    // backgroundColor: '#FF000000',
+                    chartArea: {
+                      // backgroundColor: '#66407294',
+                      backgroundColor: {
+                        fill: '#ffffffCC',
+                        fillOpacity: 0.1
+                      }
+                      
+                    },
+                    backgroundColor: 
+                    // '#66407294', 
+                    {
+                      fill: '#ffffffCC',
+                      fillOpacity: 0.6
+                    },
+                   
+                  titleTextStyle: {
+                      // color: '#ffffff',
+                      fontSize: 16,
+                      fontName: 'Arial',
+                      bold: true,
+                      // italic: true
+                  },
+                  legend: {textStyle: {
+                      // color: '#ffffff',
+                      // fontSize: 20,
+                      // fontName: 'Arial',
+                      // bold: true,
+                      // italic: true
+                   },
+                   backgroundColor: '#FF000000',
+                  },
+                    series: {
+                      0: {pointSize: 5, lineWidth: 0, pointShape: 'triangle', color: '#fe6dbc', visibleInLegend: false},
+                      1: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#fe6dbc', lineDashStyle: [5, 0]},
+                      
+                      2: {pointSize: 5, lineWidth: 0, pointShape: 'diamond',  color: '#0057e7', visibleInLegend: false},
+                      3: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#0057e7', lineDashStyle: [5, 0]},
+                      
+                      4: {pointSize: 5, lineWidth: 0, pointShape: 'cicle',    color: '#00c290', visibleInLegend: false},
+                      5: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#00c290', lineDashStyle: [5, 0]},
+                      
+                      6: {pointSize: 5, lineWidth: 0, pointShape: 'square',   color: '#f6ab6d', visibleInLegend: false},
+                      7: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#f6ab6d', lineDashStyle: [5, 0]},
+                      
+                      8: {pointSize: 5, lineWidth: 0, pointShape: 'star',   color: '#ff4646', visibleInLegend: false},
+                      9: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#ff4646', lineDashStyle: [5, 0]},
+                      
+                      }
+                  })
+    // print(chart) 
+    var chart2 = ui.Chart.array.values(lai_cabs, 1, sdoy_2018)
+                  .setSeriesNames(['2016', '2016', '2017', '2017', '2018', '2018', '2019', '2019', '2020', '2020'])
+                  .setChartType('LineChart')
+                  .setOptions({
+                    title: 'LAI x Cab', //+ crop_type, //+' in ' + year,
+                    hAxis: {'title': 'DOY', 
+                             viewWindow: {min: 0, max: 360},                            
+                             textStyle: {
+                              // color: '#ffffff',
+                              // fontSize: 20,
+                              // fontName: 'Arial',
+                              // bold: true,
+                              italic: true},
+                            titleTextStyle: {
+                              // color: '#ffffff',
+                              // fontSize: 16,
+                              // fontName: 'Arial',
+                              // bold: false,
+                              italic: true
+                          },
+                    },
+                    vAxis: {'title': 'LAI x CAB', 
+                            viewWindow: {min:0.0}, 
+                            textStyle: {
+                              // color: '#ffffff',
+                              // fontSize: 20,
+                              // fontName: 'Arial',
+                              // bold: true,
+                              italic: true},
+                            titleTextStyle: {
+                              // color: '#ffffff',
+                              // fontSize: 16,
+                              // fontName: 'Arial',
+                              // bold: true,
+                              italic: true
+                          },
+                      
+                    },                
+                    interpolateNulls: true,
+                    // backgroundColor: '#FF000000',
+                    chartArea: {
+                      // backgroundColor: '#66407294',
+                      backgroundColor: {
+                        fill: '#ffffffCC',
+                        fillOpacity: 0.1
+                      }
+                      
+                    },
+                    backgroundColor: 
+                    // '#66407294', 
+                    {
+                      fill: '#ffffffCC',
+                      fillOpacity: 0.6
+                    },
+                   
+                  titleTextStyle: {
+                      // color: '#ffffff',
+                      fontSize: 16,
+                      fontName: 'Arial',
+                      bold: true,
+                      // italic: true
+                  },
+                  legend: {textStyle: {
+                      // color: '#ffffff',
+                      // fontSize: 20,
+                      // fontName: 'Arial',
+                      // bold: true,
+                      // italic: true
+                   },
+                   backgroundColor: '#FF000000',
+                  },
+                    
+                    series: {
+                      0: {pointSize: 5, lineWidth: 0, pointShape: 'triangle', color: '#fe6dbc', visibleInLegend: false},
+                      1: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#fe6dbc', lineDashStyle: [5, 0]},
+                      
+                      2: {pointSize: 5, lineWidth: 0, pointShape: 'diamond',  color: '#0057e7', visibleInLegend: false},
+                      3: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#0057e7', lineDashStyle: [5, 0]},
+                      
+                      4: {pointSize: 5, lineWidth: 0, pointShape: 'cicle',    color: '#00c290', visibleInLegend: false},
+                      5: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#00c290', lineDashStyle: [5, 0]},
+                      
+                      6: {pointSize: 5, lineWidth: 0, pointShape: 'square',   color: '#f6ab6d', visibleInLegend: false},
+                      7: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#f6ab6d', lineDashStyle: [5, 0]},
+                      
+                      8: {pointSize: 5, lineWidth: 0, pointShape: 'star',   color: '#ff4646', visibleInLegend: false},
+                      9: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#ff4646', lineDashStyle: [5, 0]},
+                      }
+                  })
+
+    var chart3 = ui.Chart.array.values(cbrowns, 1, sdoy_2018)
+              .setSeriesNames(['2016', '2016', '2017', '2017', '2018', '2018', '2019', '2019', '2020', '2020'])
+              .setChartType('LineChart')
+              .setOptions({
+                    title: 'Cbrown', //+ crop_type, //+' in ' + year,
+                    hAxis: {'title': 'DOY', 
+                            viewWindow: {min: 0, max: 360},
+                              textStyle: {
+                              // color: '#ffffff',
+                              // fontSize: 20,
+                              // fontName: 'Arial',
+                              // bold: true,
+                              italic: true},
+                            titleTextStyle: {
+                              // color: '#ffffff',
+                              // fontSize: 16,
+                              // fontName: 'Arial',
+                              // bold: false,
+                              italic: true
+                          },
+                    },
+                    vAxis: {'title': 'Cbrown', 
+                            viewWindow: {min:0.0}, 
+                            textStyle: {
+                              // color: '#ffffff',
+                              // fontSize: 20,
+                              // fontName: 'Arial',
+                              // bold: true,
+                              italic: true},
+                            titleTextStyle: {
+                              // color: '#ffffff',
+                              // fontSize: 16,
+                              // fontName: 'Arial',
+                              // bold: true,
+                              italic: true
+                          },
+                      
+                    },                
+                    interpolateNulls: true,
+                    // backgroundColor: '#FF000000',
+                    chartArea: {
+                      // backgroundColor: '#66407294',
+                      backgroundColor: {
+                        fill: '#ffffffCC',
+                        fillOpacity: 0.1
+                      }
+                      
+                    },
+                    backgroundColor: 
+                    // '#66407294', 
+                    {
+                      fill: '#ffffffCC',
+                      fillOpacity: 0.6
+                    },
+                   
+                  titleTextStyle: {
+                      // color: '#ffffff',
+                      fontSize: 16,
+                      fontName: 'Arial',
+                      bold: true,
+                      // italic: true
+                  },
+                  legend: {textStyle: {
+                      // color: '#ffffff',
+                      // fontSize: 20,
+                      // fontName: 'Arial',
+                      // bold: true,
+                      // italic: true
+                   },
+                   backgroundColor: '#FF000000',
+                  },
+                series: {
+                  0: {pointSize: 5, lineWidth: 0, pointShape: 'triangle', color: '#fe6dbc', visibleInLegend: false},
+                  1: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#fe6dbc', lineDashStyle: [5, 0]},
+                  
+                  2: {pointSize: 5, lineWidth: 0, pointShape: 'diamond',  color: '#0057e7', visibleInLegend: false},
+                  3: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#0057e7', lineDashStyle: [5, 0]},
+                  
+                  4: {pointSize: 5, lineWidth: 0, pointShape: 'cicle',    color: '#00c290', visibleInLegend: false},
+                  5: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#00c290', lineDashStyle: [5, 0]},
+                  
+                  6: {pointSize: 5, lineWidth: 0, pointShape: 'square',   color: '#f6ab6d', visibleInLegend: false},
+                  7: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#f6ab6d', lineDashStyle: [5, 0]},
+                  
+                  8: {pointSize: 5, lineWidth: 0, pointShape: 'star',   color: '#ff4646', visibleInLegend: false},
+                  9: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#ff4646', lineDashStyle: [5, 0]},
+                      
+                  }
+              })
+    var chart4 = ui.Chart.array.values(lai_cws , 1, sdoy_2018)
+              .setSeriesNames(['2016', '2016', '2017', '2017', '2018', '2018', '2019', '2019', '2020', '2020'])
+              .setChartType('LineChart')
+              .setOptions({
+                    title: 'LAI x CW', //+ crop_type, //+' in ' + year,
+                    hAxis: {'title': 'DOY', 
+                            viewWindow: {min: 0, max: 360},
+                            textStyle: {
+                              // color: '#ffffff',
+                              // fontSize: 20,
+                              // fontName: 'Arial',
+                              // bold: true,
+                              italic: true},
+                            titleTextStyle: {
+                              // color: '#ffffff',
+                              // fontSize: 16,
+                              // fontName: 'Arial',
+                              // bold: false,
+                              italic: true
+                          },
+                    },
+                    vAxis: {'title': 'LAI x CW', 
+                            viewWindow: {min:0.0}, 
+                            textStyle: {
+                              // color: '#ffffff',
+                              // fontSize: 20,
+                              // fontName: 'Arial',
+                              // bold: true,
+                              italic: true},
+                            titleTextStyle: {
+                              // color: '#ffffff',
+                              // fontSize: 16,
+                              // fontName: 'Arial',
+                              // bold: true,
+                              italic: true
+                          },
+                      
+                    },                
+                    interpolateNulls: true,
+                    // backgroundColor: '#FF000000',
+                    chartArea: {
+                      // backgroundColor: '#66407294',
+                      backgroundColor: {
+                        fill: '#ffffffCC',
+                        fillOpacity: 0.1
+                      }
+                      
+                    },
+                    backgroundColor: 
+                    // '#66407294', 
+                    {
+                      fill: '#ffffffCC',
+                      fillOpacity: 0.6
+                    },
+                   
+                  titleTextStyle: {
+                      // color: '#ffffff',
+                      fontSize: 16,
+                      fontName: 'Arial',
+                      bold: true,
+                      // italic: true
+                  },
+                  legend: {textStyle: {
+                      // color: '#ffffff',
+                      // fontSize: 20,
+                      // fontName: 'Arial',
+                      // bold: true,
+                      // italic: true
+                   },
+                   backgroundColor: '#FF000000',
+                  },
+                      
+                series: {
+                  0: {pointSize: 5, lineWidth: 0, pointShape: 'triangle', color: '#fe6dbc', visibleInLegend: false},
+                  1: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#fe6dbc', lineDashStyle: [5, 0]},
+                  
+                  2: {pointSize: 5, lineWidth: 0, pointShape: 'diamond',  color: '#0057e7', visibleInLegend: false},
+                  3: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#0057e7', lineDashStyle: [5, 0]},
+                  
+                  4: {pointSize: 5, lineWidth: 0, pointShape: 'cicle',    color: '#00c290', visibleInLegend: false},
+                  5: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#00c290', lineDashStyle: [5, 0]},
+                  
+                  6: {pointSize: 5, lineWidth: 0, pointShape: 'square',   color: '#f6ab6d', visibleInLegend: false},
+                  7: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#f6ab6d', lineDashStyle: [5, 0]},
+                  
+                  8: {pointSize: 5, lineWidth: 0, pointShape: 'star',   color: '#ff4646', visibleInLegend: false},
+                  9: {pointSize: 0, lineWidth: 3, curveType: 'function',  color: '#ff4646', lineDashStyle: [5, 0]},
+                      
+                  }
+              })
+    var label1 = ui.Label('Crop Type', 
+      {fontFamily: 'Sans-serif',
+      border: 1,
+      whiteSpace: 'pre',
+      fontWeight: 'bold',
+      color: '#ffffff',
+      backgroundColor: '#FF000000',
+      })
+      
+    var label2 = ui.Label(crop_type, 
+      {fontFamily: 'Sans-serif',
+      border: 1,
+      whiteSpace: 'pre',
+      color: '#ffffff',
+      backgroundColor: '#FF000000',
+      })
+    var label3 = ui.Label('Scroll down to check crop type for each year!', 
+      {fontFamily: 'Sans-serif',
+      border: 1,
+      whiteSpace: 'pre',
+      fontWeight: 'bold',
+      color: '#ffffff',
+      backgroundColor: '#FF000000',
+      })
+  chartPanel.widgets().set(0, label3)   
+  chartPanel.widgets().set(1, chart1)
+  chartPanel.widgets().set(2, chart2)
+  chartPanel.widgets().set(3, chart3)
+  chartPanel.widgets().set(4, chart4)
+  chartPanel.widgets().set(5, label1)
+  chartPanel.widgets().set(6, label2)
+  
+  }) 
+}
+
+drawingTools.onDraw(ui.util.debounce(chartTimeSeries, 500));
+drawingTools.onEdit(ui.util.debounce(chartTimeSeries, 500));
+
+
+
+// var chartPanel = ui.Panel({
+//   style:
+//       {height: '760px', width: '600px', 
+//       position: 'bottom-right', 
+//       shown: false, 
+//       backgroundColor: '#FF000000',
+//       // opacity:0.5,
+//       }
+// });
+
+var title = ui.Label('East Anglia Crop watch', 
+      {whiteSpace: 'pre',  
+      position: 'top-center',
+      fontFamily: 'Sans-serif',
+      fontSize:  '24px',
+      fontWeight: 'bold',
+      border: 1,
+      color: '#ffffff',
+      backgroundColor: '#FF000000',
+          
+        })
+// ui.root.add(0, controlPanel);
+// ui.root.insert(0, controlPanel);
+
+
+Map.add(title);
+
+ui.root.add(Map);

@@ -1,0 +1,428 @@
+var sample1 = ee.FeatureCollection('users/marcyinfeng/EastAnglia_crop_samples_seed_0')
+var sample2 = ee.FeatureCollection('users/marcyinfeng/EastAnglia_crop_samples_seed_1')
+var sample3 = ee.FeatureCollection('users/marcyinfeng/EastAnglia_crop_samples_seed_2')
+var sample4 = ee.FeatureCollection('users/marcyinfeng/EastAnglia_crop_samples_seed_3')
+var sample5 = ee.FeatureCollection('users/marcyinfeng/EastAnglia_crop_samples_seed_4')
+var sample6 = ee.FeatureCollection('users/marcyinfeng/EastAnglia_crop_samples_seed_5')
+var sample7 = ee.FeatureCollection('users/marcyinfeng/EastAnglia_crop_samples_seed_6')
+var sample8 = ee.FeatureCollection('users/marcyinfeng/EastAnglia_crop_samples_seed_7')
+var sample9 = ee.FeatureCollection('users/marcyinfeng/EastAnglia_crop_samples_seed_8')
+var samples = ee.FeatureCollection([sample1, sample2, sample3, 
+                                    sample4, sample5, sample6, 
+                                    sample7, sample8, sample9, ]).flatten()
+// Map.addLayer(samples.filterMetadata('classification', 'equals', 28))
+var crop = samples.filterMetadata('classification', 'equals', 40)
+// print(crop.first())
+var get_lai = function(item){
+  var band_name = ee.String(ee.Number(item).int()).cat('_lai')
+  return crop.aggregate_array(band_name)
+}
+
+var max_lai_ind = 30
+var lai_inds = ee.List.sequence(0, max_lai_ind)
+var lais = lai_inds.map(get_lai)
+lais = ee.Array.cat(lais, 1)
+
+var lai_mean = lais.reduce(ee.Reducer.mean(), [0])
+// print(lais.length())
+// print(lai_mean.length())
+var yValues = lais.slice(0, 0, 10000, 1000)
+var xValues = ee.List.sequence(0, max_lai_ind * 8, 8)//lai_inds.map(function(item){return ee.Number(item).multiply(8)})
+
+var chart = ui.Chart.array.values(yValues, 1, xValues)
+                  .setChartType('LineChart')
+                  .setOptions({
+                    title: 'LAI mean', //+ crop_type, //+' in ' + year,
+                    hAxis: {'title': 'DOY', viewWindow: {min: 0, max: max_lai_ind * 8}},
+                    vAxis: {'title': 'LAI', viewWindow: {min:0}},
+                    interpolateNulls: true,
+                    pointSize: 0,
+                    lineWidth: 3, 
+                    // colors: ['#e0440e'],
+                    curveType: 'function',
+                    legend: {position: 'none'}
+                  })
+print(chart)
+
+var chart = ui.Chart.array.values(lai_mean, 1, xValues)
+                  .setChartType('LineChart')
+                  .setOptions({
+                    title: 'LAI mean', //+ crop_type, //+' in ' + year,
+                    hAxis: {'title': 'DOY', viewWindow: {min: 0, max: max_lai_ind * 8}},
+                    vAxis: {'title': 'LAI', viewWindow: {min:0}},
+                    interpolateNulls: true,
+                    pointSize: 0,
+                    lineWidth: 3, 
+                    // colors: ['#e0440e'],
+                    curveType: 'function',
+                    // legend: {position: 'none'}
+                  })
+print(chart)
+
+var centered = lais.subtract(lai_mean.repeat(0, lais.length().get([0])))
+
+var yValues = centered.slice(0, 0, 10000, 1000)
+
+var chart = ui.Chart.array.values(yValues, 1, xValues)
+                  .setChartType('LineChart')
+                  .setOptions({
+                    title: 'LAI centered', //+ crop_type, //+' in ' + year,
+                    hAxis: {'title': 'DOY', viewWindow: {min: 0, max: max_lai_ind * 8}},
+                    vAxis: {'title': 'LAI'},
+                    interpolateNulls: true,
+                    pointSize: 0,
+                    lineWidth: 3, 
+                    // colors: ['#e0440e'],
+                    curveType: 'function',
+                    legend: {position: 'none'}
+                  })
+print(chart)
+
+// PCA with SVD
+var numSamples = centered.length().get([0])
+var X = centered.divide(ee.Number(numSamples.subtract(1)).sqrt())
+var SVD = X.matrixSingularValueDecomposition()
+var eigenVectors = ee.Array(SVD.get('V'))
+var S = ee.Array(SVD.get('S')).matrixDiagonal()
+var eigenValues = S.multiply(S)
+
+// var ret = ee.Array(SVD.get('V')).matrixMultiply(ee.Array(SVD.get('S'))).matrixSolve(X.transpose())
+// var dif = ret.subtract(ee.Array(SVD.get('U')).transpose())
+// print(dif.reduce(ee.Reducer.max(), [0,1]))
+
+var eigenSum = eigenValues.reduce(ee.Reducer.sum(), [0, 1]).get([0,0])
+var eigenImportance = eigenValues.divide(eigenSum).project([0])
+
+var numPCs = 10
+print('Total variation of '+ numPCs +' PCs: ')
+print(eigenImportance.slice(0, 0, numPCs).reduce(ee.Reducer.sum(), [0]))
+
+var yValues = eigenVectors.slice(1, 0, numPCs)
+
+var chart = ui.Chart.array.values(yValues, 0, xValues)
+                .setChartType('LineChart')
+                .setOptions({
+                  title: 'principal Components', //+ crop_type, //+' in ' + year,
+                  hAxis: {'title': 'DOY', viewWindow: {min: 0, max: max_lai_ind * 8}},
+                  vAxis: {'title': 'PCAs'},
+                  interpolateNulls: true,
+                  pointSize: 0,
+                  lineWidth: 3, 
+                  // colors: ['#e0440e'],
+                  curveType: 'function',
+                  // legend: {position: 'none'}
+                })
+print(chart)
+
+
+
+// // PCA with covariance matrix
+// var centered = centered.toList()
+//                         .map(function(lst){
+//                           return ee.Array(lst)
+//                           })
+
+// var covarArray = centered.reduce(ee.Reducer.centeredCovariance())
+// var eigens = ee.Array(covarArray).eigen();
+// var eigenValues = eigens.slice(1, 0, 1);
+// var eigenVectors = eigens.slice(1, 1);
+// var eigenSum = eigenValues.reduce(ee.Reducer.sum(), [0, 1]).get([0,0])
+// var eigenImportance = eigenValues.divide(eigenSum).project([0])
+
+
+// print(V.subtract(eigenVectors))
+
+// var numPCs = 8
+// var inds = Array.apply(0, Array(numPCs)).map(function (x, y) { return y; })
+
+// var yValues = eigenVectors.slice(0, 0, numPCs)
+// // var xValues = lai_inds
+// print('Total variation of '+ numPCs +' PCs: ')
+// print(eigenImportance.slice(0, 0, numPCs).reduce(ee.Reducer.sum(), [0]))
+
+// var chart = ui.Chart.array.values(yValues, 1, xValues)
+//                 .setSeriesNames(inds)
+//                 .setChartType('LineChart')
+//                 .setOptions({
+//                   title: 'principal Components', //+ crop_type, //+' in ' + year,
+//                   hAxis: {'title': 'DOY', viewWindow: {min: 0, max: max_lai_ind * 8}},
+//                   vAxis: {'title': 'PCAs'},
+//                   interpolateNulls: true,
+//                   pointSize: 0,
+//                   lineWidth: 3, 
+//                   // colors: ['#e0440e'],
+//                   curveType: 'function',
+//                   // legend: {position: 'none'}
+//                 })
+// print(chart)
+
+// print(ee.Array.cat(centered, 1).length())
+// var centered = ee.Array.cat(centered, 1)
+var projected = eigenVectors.transpose().matrixMultiply(centered.transpose())
+// var projected = ee.Array.cat(centered, 1).transpose().matrixMultiply(eigenVectors.slice(1, 0, numPCs))
+// print(eigenVectors.slice(0, 0, numPCs).length())
+// print(centered.length())
+// print(projected.length())
+
+// var numPCs = 10
+var inds = Array.apply(0, Array(numPCs)).map(function (x, y) { return y; })
+// // look at the last PCs' effects
+// var inds = Array.apply(0, Array(31)).map(function (x, y) { return y; }).slice(21,31)
+
+var hist = inds.map(function(item){
+  var ind = ee.Number(item)
+  var std = ee.Array(SVD.get('S')).matrixDiagonal().get([ind, 0])
+  var pc =  projected.slice(0, ind, ind.add(1)).project([1]).divide(std).toList()
+  var hist = ee.Dictionary(pc.reduce(ee.Reducer.histogram()))
+  var bucketMeans = ee.List(hist.get('bucketMeans'))
+  var histogram = ee.List(hist.get('histogram'))
+  var bucketMin = ee.Number(hist.get('bucketMin'))
+  var bucketWidth = ee.Number(hist.get('bucketWidth'))
+  var bucketMax = bucketMin.add(histogram.length().multiply(bucketWidth))
+
+  var chart = ui.Chart.array.values(ee.List([histogram]), 1, bucketMeans)
+                .setChartType('AreaChart')
+                .setOptions({
+                  title: 'PC ' + (item + 1) + ' histogram',
+                  hAxis: {'title': 'DN', viewWindow: {min: bucketMin, max: bucketMax}},
+                  vAxis: {'title': 'count of DN'},
+                  interpolateNulls: true,
+                  pointSize: 0,
+                  lineWidth: 1, 
+                  colors: ['#e0440e'],
+                  curveType: 'function',
+                  legend: {position: 'none'}
+                })
+  print(chart)
+  
+  var create_projected = function(pcInd, min, max){
+    var zero_pc = ee.List.repeat(0, max_lai_ind + 1)
+    var step = (max.subtract(min)).divide(8)
+    var pcs = ee.List.sequence(min, max, step).map(function(item){
+      return zero_pc.set(pcInd, item)
+    })
+    return pcs
+  }
+  var projed = create_projected(ind, bucketMin, bucketMax)
+  projed = ee.Array.cat(projed, 1)
+  
+  var xx = ee.Array(SVD.get('V')).transpose().matrixSolve(projed)
+  xx = xx.add(lai_mean.repeat(0, xx.length().get([1])).transpose())
+  
+  var palettes = require('users/gena/packages:palettes');
+  var colors = palettes.colorbrewer.YlGn[9];
+  
+  var chart = ui.Chart.array.values(xx, 0, xValues)
+                  .setChartType('LineChart')
+                  .setOptions({
+                    title: 'PC ' + (item + 1) + ' effects on LAI', //+ crop_type, //+' in ' + year,
+                    hAxis: {'title': 'DOY', viewWindow: {min: 0, max: max_lai_ind * 8}},
+                    vAxis: {'title': 'LAI', viewWindow: {min: 0, max: 8}},
+                    interpolateNulls: true,
+                    pointSize: 0,
+                    lineWidth: 3, 
+                    colors: colors,
+                    curveType: 'function',
+                    legend: {position: 'none'}
+                  })
+  print(chart)
+  
+  return hist
+})
+// print(hist)
+
+var image1 = ee.Image('users/marcyinfeng/EastAnglia_2018_2_2_bio_paras')
+var image2 = ee.Image('users/marcyinfeng/EastAnglia_2018_2_1_bio_paras')
+var image3 = ee.Image('users/marcyinfeng/EastAnglia_2018_2_0_bio_paras')
+
+var image4 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_0_0_0_bio_paras')
+var image5 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_0_0_1_bio_paras')
+var image6 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_0_1_0_bio_paras')
+var image7 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_0_1_1_bio_paras')
+
+var image8 = ee.Image('users/marcyinfeng/EastAnglia_2018_1_0_bio_paras')
+var image9 = ee.Image('users/marcyinfeng/EastAnglia_2018_1_2_bio_paras')
+
+var image10 = ee.Image('users/uclgeogeo/EastAnglia_2018_1_0_0_1_bio_paras')
+var image11 = ee.Image('users/uclgeogeo/EastAnglia_2018_1_1_0_0_bio_paras')
+var image12 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_1_0_0_bio_paras')
+var image13 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_1_0_0_bio_paras')
+
+var image14 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_1_1_1_bio_paras')
+var image15 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_1_0_1_bio_paras')
+var image16 = ee.Image('users/marcyinfeng/EastAnglia_2018_0_1_1_0_bio_paras')
+
+var EastAnglia_2018 = ee.ImageCollection.fromImages([image1, image2, image3, image4, image5, 
+                                                     image6, image7, image8, image9, image10,
+                                                     image11, image12, image13, image14, image15, image16]).median()
+
+
+
+
+var bn = EastAnglia_2018.bandNames()
+var ind = 0
+
+var year = '2018'
+var scale_factor = 1000
+var parameter = 'lai'
+
+var obs = EastAnglia_2018.select(ee.List.sequence(ind, bn.length().subtract(1), 4))
+var max_doy = obs.bandNames().length().subtract(1).multiply(8).add(4)
+var doy = ee.List.sequence(4, max_doy, 8)
+var to_col = function(ii){
+  ii = ee.Number(ii).int()
+  var value = doy.get(ii)
+  
+  var start_date = ee.Date(ee.String(year).cat(ee.String('-01-01')))
+  var image_date = start_date.advance(ee.Number(value).int(), 'day')
+  // var image = obs.filterDate(image_date, image_date.advance(1, 'day')).mean()
+  var time_start = image_date.millis()
+  
+  var image = obs.select(ii)
+                 .divide(scale_factor)
+                 .rename(parameter)
+                 .set('system:time_start', time_start)
+                 
+  image = image.subtract(ee.Image.constant(lai_mean.get([0, ii]))).float()
+  
+  var zero_image = ee.Image(0)
+  zero_image = zero_image.where(image.mask().eq(1), image)
+  zero_image = zero_image.updateMask(image.mask().eq(1))
+  
+  return zero_image
+  
+}
+var mobs = ee.List.sequence(0, max_lai_ind).map(to_col)
+// mobs = //.toBands()//.unmask()
+// print(lai_mean.project([1]))
+var centered_image = ee.ImageCollection.fromImages(mobs)//.subtract(ee.Image.constant(lai_mean.toList().flatten()))
+Map.addLayer(centered_image, {}, 'centered', false)
+
+centered_image = centered_image.toArray()
+// Map.addLayer(mobs)
+// Map.addLayer(centered_image.arrayLengths())
+// Map.addLayer(ee.Image(eigenVectors.transpose()))
+
+// Map.addLayer(ee.Image(eigenVectors.transpose()).arrayLengths())
+var getNewBandNames = function(prefix) {
+  var seq = ee.List.sequence(1, max_lai_ind + 1);
+  return seq.map(function(b) {
+    return ee.String(prefix).cat(ee.Number(b).int());
+  });
+};
+
+var eigenvectors = ee.List.sequence(0, max_lai_ind).map(function(item){
+  var item  = ee.Number(item).int()
+  var mask = ee.Image(mobs.get(item)).mask()
+  var image = ee.Image.constant(eigenVectors.toList().get(item)).float()
+  return image.updateMask(mask.eq(1))
+})
+
+eigenvectors = ee.ImageCollection.fromImages(eigenvectors)//.toBands()
+// Map.addLayer(eigenvectors.toArray())
+
+var sdImage = ee.Image(ee.Array(SVD.get('S')).matrixDiagonal())
+    .arrayProject([0]).arrayFlatten([getNewBandNames('sd')]);
+    
+var principalComponents =  eigenvectors.toArray().arrayTranspose()
+                                       .matrixMultiply(centered_image)
+                                       .arrayProject([0])
+                                        // Make the one band array image a multi-band image, [] -> image.
+                                       .arrayFlatten([getNewBandNames('pc')])
+                                       .divide(sdImage)
+                                       
+var palettes = require('users/gena/packages:palettes');
+var palette = palettes.colorbrewer.RdYlGn[9]
+
+var cm1 = ee.Image('users/marcyinfeng/Crop_Map_of_England_2018_Cambridgeshire')
+var cm2 = ee.Image('users/marcyinfeng/Crop_Map_of_England_2018_Suffolk')
+var cm3 = ee.Image('users/marcyinfeng/Crop_Map_of_England_2018_Norfolk')
+
+var cm2018 = ee.ImageCollection.fromImages([cm1, cm2, cm3]).median()
+
+var winter_wheat = cm2018.eq(40)
+
+
+var animation = require('users/gena/packages:animation')
+var images = ee.List.sequence(0, numPCs - 1).map(function(ind){
+  ind = ee.Number(ind).int()
+  return principalComponents.select(ind).updateMask(winter_wheat)
+})
+
+// animation.animate(images, { maxFrames: numPCs, 
+//                             position: 'bottom-center', 
+//                             timeStep: 500, 
+//                             vis: {min:-2, max:2, palette: palette},
+                            
+// })
+
+function makeColorBarParams(palette) {
+  return {
+    bbox: [0, 0, 1, 0.3],
+    dimensions: '200x20',
+    format: 'png',
+    min: 0,
+    max: 1,
+    palette: palette,
+  };
+}
+
+// Create the color bar for the legend.
+var colorBar = ui.Thumbnail({
+  image: ee.Image.pixelLonLat().select(0),
+  params: makeColorBarParams(palette),
+  style: {stretch: 'horizontal', 
+          margin: '0px 8px', 
+          maxHeight: '24px',
+          backgroundColor: '#FF000000'
+  },
+});
+
+// Create a panel with three numbers for the legend.
+var legendLabels = ui.Panel({
+  widgets: [
+    ui.Label('Bad', {margin: '4px 8px', backgroundColor: '#FF000000', color: '#ffffff'}),
+    ui.Label('Same', {margin: '4px 8px', textAlign: 'center', stretch: 'horizontal', backgroundColor: '#FF000000', color: '#ffffff'}),
+    ui.Label('Good', {margin: '4px 8px', backgroundColor: '#FF000000', color: '#ffffff'})
+  ],
+  layout: ui.Panel.Layout.flow('horizontal'),
+  style: {backgroundColor: '#FF000000',}
+});
+
+var legendTitle = ui.Label({
+  value: 'Crop LAI indicator',
+  style: {fontWeight: 'bold',  
+          textAlign: 'center', 
+          backgroundColor: '#FF000000', 
+          position: 'bottom-center', 
+          stretch: 'horizontal',
+          color: '#ffffff'
+    
+  }
+});
+
+// Add the legendPanel to the map.
+var legendPanel = ui.Panel({widgets: [legendTitle, colorBar, legendLabels], 
+                            style: {backgroundColor: '#FF000000',
+                                    position: 'bottom-center'
+                            },
+                            
+  
+});
+Map.add(legendPanel);
+Map.setOptions("HYBRID");
+Map.setControlVisibility({all: false});
+
+Map.addLayer(principalComponents.select(0).updateMask(winter_wheat), {min:-2, max:2, palette: palette}, 'pc1')
+
+
+// Map.addLayer(principalComponents.select(0).updateMask(winter_wheat), {min:-2, max:2, palette: palette}, 'pc1')
+// Map.addLayer(principalComponents.select(1).updateMask(winter_wheat), {min:-2, max:2, palette: palette}, 'pc2')
+// Map.addLayer(principalComponents.select(2).updateMask(winter_wheat), {min:-2, max:2, palette: palette}, 'pc3')
+// Map.addLayer(principalComponents.select(3).updateMask(winter_wheat), {min:-2, max:2, palette: palette}, 'pc4')
+// Map.addLayer(principalComponents.select(4).updateMask(winter_wheat), {min:-2, max:2, palette: palette}, 'pc5')
+// Map.addLayer(principalComponents.select(5).updateMask(winter_wheat), {min:-2, max:2, palette: palette}, 'pc6')
+// Map.addLayer(principalComponents.select(6).updateMask(winter_wheat), {min:-2, max:2, palette: palette}, 'pc7')
+// Map.addLayer(principalComponents.select(7).updateMask(winter_wheat), {min:-2, max:2, palette: palette}, 'pc8')
+
+

@@ -1,0 +1,483 @@
+
+Map.setOptions('Dark', {Dark: darkMap()});
+Map.setControlVisibility({all: false});
+Map.setCenter(7.14, 20.88, 3)
+
+//University of Maryland land cover classification 
+// 12, Croplands: at least 60% of area is cultivated cropland.
+// We only focus on area where consistly to be cropland
+// and those areas are likely to dominant the major crop
+// prodcution over the world
+var MCD12Q1 = ee.ImageCollection("MODIS/006/MCD12Q1");
+var landcover = MCD12Q1.select('LC_Type2')
+                       .filter(ee.Filter.calendarRange(2010, 2020, 'year'))
+var cropland = landcover.map(function(image){
+  return image.eq(12)
+}).min()
+cropland = cropland.updateMask(cropland.eq(1))
+
+Map.addLayer(cropland, {palette: ['#ff7400']})
+
+
+var lai = ee.ImageCollection("MODIS/006/MCD15A3H")
+            .select('Lai')
+            .filter(ee.Filter.calendarRange(2010, 2020, 'year'))
+            .filter(ee.Filter.calendarRange(1, 5, 'month'))
+            .sort('system:time_start')
+            .map(function(image){
+              return image.updateMask(cropland)
+            })
+// Map.addLayer(lai.filter(ee.Filter.calendarRange(2020, 2021, 'year')))
+var gpp = ee.ImageCollection("MODIS/006/MOD17A2H").merge('MODIS/006/MYD17A2H')
+            .filter(ee.Filter.calendarRange(2010, 2020, 'year'))
+            .select('Gpp')
+            .filter(ee.Filter.calendarRange(1, 5, 'month'))
+            .sort('system:time_start')
+            .map(function(image){
+              return image.updateMask(cropland)
+            })
+            
+
+var gpp2020 = gpp.filter(ee.Filter.calendarRange(2020, 2021, 'year'))
+var lastDate = gpp2020.sort('system:time_start', false).first().date()
+var lastDoy = ee.Number.parse(lastDate.format('D')).int()
+
+function get_ratio(lD){
+  lD = ee.Number(lD)
+  var avGpp = ee.List.sequence(1, lD, 8).map(function(item){
+    item = ee.Number(item).int()
+    var date = ee.Date('2020-01-01').advance(item.subtract(1), 'day').millis()
+    var images = gpp.filter(ee.Filter.calendarRange(item, item.add(1), 'day_of_year'))
+    return images.reduce(ee.Reducer.mean())
+                 .set('system:tims_start', date)
+  })
+  
+  avGpp = ee.ImageCollection.fromImages(avGpp)
+  
+  var sumGpp = avGpp.reduce(ee.Reducer.sum())
+  var sumGpp2020 = gpp2020.filter(ee.Filter.calendarRange(1, lD, 'day_of_year'))
+                          .reduce(ee.Reducer.sum()).divide(2)
+  return sumGpp2020.divide(sumGpp)
+}
+
+var ratios = ee.List.sequence(1, lastDoy, 8).map(get_ratio)
+var palettes = require('users/gena/packages:palettes');
+var palette = palettes.colorbrewer.RdYlGn[9];
+var animation = require('users/gena/packages:animation')
+// animation.animate(ratios, { maxFrames: 16, 
+//                             position: 'top-center', 
+//                             timeStep: 200, 
+//                             vis: {min:0.5, max:1.5, palette: palette},
+// })
+
+
+
+/*
+ * Legend setup
+ */
+
+// Creates a color bar thumbnail image for use in legend from the given color
+// palette.
+function makeColorBarParams(palette) {
+  return {
+    bbox: [0, 0, 1, 0.3],
+    dimensions: '200x20',
+    format: 'png',
+    min: 0,
+    max: 1,
+    palette: palette,
+  };
+}
+
+// Create the color bar for the legend.
+var colorBar = ui.Thumbnail({
+  image: ee.Image.pixelLonLat().select(0),
+  params: makeColorBarParams(palette),
+  style: {stretch: 'horizontal', 
+          margin: '0px 8px', 
+          maxHeight: '24px',
+          backgroundColor: '#FF000000'
+  },
+});
+
+// Create a panel with three numbers for the legend.
+var legendLabels = ui.Panel({
+  widgets: [
+    ui.Label('Bad', {margin: '4px 8px', backgroundColor: '#FF000000', color: '#ffffff'}),
+    ui.Label('Same', {margin: '4px 8px', textAlign: 'center', stretch: 'horizontal', backgroundColor: '#FF000000', color: '#ffffff'}),
+    ui.Label('Good', {margin: '4px 8px', backgroundColor: '#FF000000', color: '#ffffff'})
+  ],
+  layout: ui.Panel.Layout.flow('horizontal'),
+  style: {backgroundColor: '#FF000000',}
+});
+
+var legendTitle = ui.Label({
+  value: 'Crop GPP indicator',
+  style: {fontWeight: 'bold',  
+          textAlign: 'center', 
+          backgroundColor: '#FF000000', 
+          position: 'bottom-center', 
+          stretch: 'horizontal',
+          color: '#ffffff'
+    
+  }
+});
+
+// Add the legendPanel to the map.
+var legendPanel = ui.Panel({widgets: [legendTitle, colorBar, legendLabels], 
+                            style: {backgroundColor: '#FF000000',
+                                    position: 'bottom-center'
+                            },
+                            
+  
+});
+Map.add(legendPanel);
+
+var title = ui.Label('Global Crop Production Monitoring System', 
+                     {backgroundColor: '#FF000000',
+                      position: 'top-center',
+                      color: '#ffffff',
+                      fontSize: '24px',
+                      fontWeight: 'bold'
+                     });
+
+
+Map.add(title);
+
+var lastDateStr = lastDate.format('YYYY-MM-dd')
+lastDateStr.evaluate(function(value){
+  var LatestDate = ui.Label(value, 
+                       {backgroundColor: '#FF000000',
+                        position: 'top-right',
+                        color: 'red',
+                        fontSize: '16px',
+                        fontWeight: 'bold'
+                       });  
+  Map.add(LatestDate);
+})
+
+
+Map.addLayer(ee.Image(ratios.get(-1)), {min:0.5, max:1.5, palette: palette})
+// Map.addLayer()
+// Map.addLayer(avGpp)
+
+function darkMap() {
+  return [
+    {
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#191919"
+        }
+      ]
+    },
+    {
+      "elementType": "labels.icon",
+      "stylers": [
+        {
+          "visibility": "off"
+        }
+      ]
+    },
+    {
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#757575"
+        }
+      ]
+    },
+    {
+      "elementType": "labels.text.stroke",
+      "stylers": [
+        {
+          "color": "#212121"
+        }
+      ]
+    },
+    {
+      "featureType": "administrative",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#757575"
+        },
+        {
+          "visibility": "off"
+        }
+      ]
+    },
+    {
+      "featureType": "administrative.country",
+      "elementType": "geometry.stroke",
+      "stylers": [
+        {
+          "visibility": "on"
+        }
+      ]
+    },
+    {
+      "featureType": "administrative.country",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#9e9e9e"
+        }
+      ]
+    },
+    {
+      "featureType": "administrative.land_parcel",
+      "stylers": [
+        {
+          "visibility": "off"
+        }
+      ]
+    },
+    {
+      "featureType": "administrative.locality",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#bdbdbd"
+        }
+      ]
+    },
+    {
+      "featureType": "administrative.neighborhood",
+      "stylers": [
+        {
+          "visibility": "off"
+        }
+      ]
+    },
+    {
+      "featureType": "administrative.province",
+      "elementType": "geometry.stroke",
+      "stylers": [
+        {
+          "visibility": "on"
+        }
+      ]
+    },
+    {
+      "featureType": "landscape",
+      "elementType": "geometry.fill",
+      "stylers": [
+        {
+          "visibility": "on"
+        }
+      ]
+    },
+    {
+      "featureType": "landscape.natural.terrain",
+      "elementType": "labels.text.stroke",
+      "stylers": [
+        {
+          "visibility": "on"
+        }
+      ]
+    },
+    {
+      "featureType": "poi",
+      "stylers": [
+        {
+          "visibility": "off"
+        }
+      ]
+    },
+    {
+      "featureType": "poi",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#757575"
+        }
+      ]
+    },
+    {
+      "featureType": "poi.park",
+      "stylers": [
+        {
+          "visibility": "off"
+        }
+      ]
+    },
+    {
+      "featureType": "poi.park",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#181818"
+        }
+      ]
+    },
+    {
+      "featureType": "poi.park",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#616161"
+        }
+      ]
+    },
+    {
+      "featureType": "poi.park",
+      "elementType": "labels.text.stroke",
+      "stylers": [
+        {
+          "color": "#1b1b1b"
+        }
+      ]
+    },
+    {
+      "featureType": "road",
+      "stylers": [
+        {
+          "visibility": "off"
+        }
+      ]
+    },
+    {
+      "featureType": "road",
+      "elementType": "geometry.fill",
+      "stylers": [
+        {
+          "color": "#2c2c2c"
+        }
+      ]
+    },
+    {
+      "featureType": "road",
+      "elementType": "labels",
+      "stylers": [
+        {
+          "visibility": "off"
+        }
+      ]
+    },
+    {
+      "featureType": "road",
+      "elementType": "labels.icon",
+      "stylers": [
+        {
+          "visibility": "off"
+        }
+      ]
+    },
+    {
+      "featureType": "road",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#8a8a8a"
+        }
+      ]
+    },
+    {
+      "featureType": "road.arterial",
+      "stylers": [
+        {
+          "visibility": "off"
+        }
+      ]
+    },
+    {
+      "featureType": "road.arterial",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#373737"
+        }
+      ]
+    },
+    {
+      "featureType": "road.highway",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#3c3c3c"
+        }
+      ]
+    },
+    {
+      "featureType": "road.highway",
+      "elementType": "labels",
+      "stylers": [
+        {
+          "visibility": "off"
+        }
+      ]
+    },
+    {
+      "featureType": "road.highway.controlled_access",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#4e4e4e"
+        }
+      ]
+    },
+    {
+      "featureType": "road.local",
+      "stylers": [
+        {
+          "visibility": "off"
+        }
+      ]
+    },
+    {
+      "featureType": "road.local",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#616161"
+        }
+      ]
+    },
+    {
+      "featureType": "transit",
+      "stylers": [
+        {
+          "visibility": "off"
+        }
+      ]
+    },
+    {
+      "featureType": "transit",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#757575"
+        }
+      ]
+    },
+    {
+      "featureType": "water",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#000000"
+        }
+      ]
+    },
+    {
+      "featureType": "water",
+      "elementType": "labels.text",
+      "stylers": [
+        {
+          "visibility": "off"
+        }
+      ]
+    },
+    {
+      "featureType": "water",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#3d3d3d"
+        }
+      ]
+    }
+  ];
+}
+

@@ -1,0 +1,283 @@
+// A sensor invariant Atmospheric Correction (SIAC) GEE version
+// v1 -- 2019-05-06
+// Author: Fengn Yin, UCL
+// Email: ucfafy@ucl.ac.uk
+// Github: https://github.com/MarcYin/SIAC
+// DOI: https://eartharxiv.org/ps957/
+// LICENSE: GNU GENERAL PUBLIC LICENSE V3
+var Sen2Cloud = require('users/marcyinfeng/Algorithms:S2_MT_Cloud')
+var Sen2Cloud = require('users/marcyinfeng/Algorithms:NN_cloud')
+var mcd19_prior = require('users/marcyinfeng/Algorithms:/mcd19_prior')
+var AOT         = require('users/marcyinfeng/Algorithms:/get_aot')
+// var s2_view_ang = require('users/marcyinfeng/Algorithms/:/S2_view_angle')
+var NN_prosail  = require('users/marcyinfeng/Algorithms/:/NN_prosail')
+var xps         = require('users/marcyinfeng/Algorithms/:/get_xps')
+
+var get_ozone_prior = function(image){
+  var image_date = image.date()
+  var tco3 = ee.ImageCollection('TOMS/MERGED')
+          .filterDate(ee.Date(image_date).advance(-3, 'day'), 
+                      ee.Date(image_date).advance( 3, 'day'))
+          .mean()
+  var start_year = ee.Date(image_date).advance(-3, 'year').get('year')
+  var end_year   = ee.Date(image_date).advance( 3, 'year').get('year')
+  var month      = ee.Date(image_date).get('month')
+  
+  var monthly_climatology = ee.ImageCollection('TOMS/MERGED')
+                              .filter(ee.Filter.calendarRange(start_year, end_year, 'year'))
+                              .filter(ee.Filter.calendarRange(month , month, 'month'))
+                              .median()
+                              .multiply(0.001)
+  
+  var ozone = ee.Image(ee.Algorithms.If(tco3.bandNames(), tco3.select('ozone').multiply(0.001), monthly_climatology.select('ozone')))
+  
+  var tco3 = ozone.unmask().where(ozone.mask().eq(0), monthly_climatology)
+  
+  var ker = ee.Kernel.square(200, "pixels")
+  var tco3_mean = tco3.reduceNeighborhood({reducer: ee.Reducer.mean(), 
+                                            kernel: ker,
+                                            inputWeight: 'mask',
+                                            skipMasked:false,
+                                            optimization:'boxcar',
+                                          }).rename('tco3')
+  var tco3 = tco3.unmask().where(tco3.mask().eq(0), tco3_mean)
+  return tco3
+}
+
+// var s2_cloud = function(image){
+
+//   var cloud = Sen2Cloud.get_cloud(image)
+//   return image.updateMask(cloud.select('cloud').eq(0)
+//                     .and(cloud.select('shadow').eq(0))
+//                     .and(cloud.select('cirrus').eq(0)))
+// }
+
+
+// var s2_cloud = function(image){
+//   var image1 = image.multiply(0.0001).float()
+//   var cloud_bands = ['B1', 'B2', 'B4', 'B5', 'B8', 'B8A', 'B9', 'B10', 'B11', 'B12']
+//   var control = image1.select(cloud_bands)//.reproject(crs, null, 10)
+//   var cloud_prob = Sen2Cloud.sen2cloud_prob(control)
+  
+//   // var NDSI = image.normalizedDifference(['B3', 'B11']).rename('NDSI');
+//   // var snow = NDSI.gt(0.45).and(image.select('B8').gt(0.1500))
+//   //                               .and(image.select('B12').lt(0.12)).rename('snow')
+//   var cloud = cloud_prob.select('cloud_prob').gt(0.44).rename('cloud')
+//   var kernel1 = ee.Kernel.circle({radius: 10, units:  'meters'})
+//   var kernel2 = ee.Kernel.circle({radius: 10, units:  'meters'})
+//   var cloud = cloud
+//           .focal_min({kernel: kernel1, iterations: 2})
+//           .focal_max({kernel: kernel2, iterations: 5})
+  
+//   var dataset = ee.Image('USGS/GMTED2010');
+//   var elevation = dataset.select('be75').clip(image.geometry()) // elevation.unmask().where(elevation.mask().eq(0), )
+//   var x = elevation.subtract(3089.658856150076)
+//   var thresh = ee.Image(0.23524323529734986).divide(ee.Image(1).add(ee.Image(2).pow(ee.Image(-0.00198987602224718).multiply(x).divide(0.693))))
+  
+//   var thresh = thresh.multiply(1.01).add(0.01)
+//   var cirrus = image1.select('B10').gt(thresh).rename('cirrus')
+  
+//   return image.updateMask( cloud.select('cloud' ).eq(0))
+//               // .updateMask(cirrus.select('cirrus').eq(0))//image.addBands(cloud.eq(0)).addBands(image.select('B2').mask().rename('mask'))//.updateMask(cloud.eq(0))
+// }
+
+var s2_cloud = function(image){
+  
+  var image1 = image.multiply(0.0001).float()
+  var cloud_bands = ['B1', 'B2', 'B4', 'B5', 'B8', 'B8A', 'B9', 'B10', 'B11', 'B12']
+  var control = image1.select(cloud_bands)//.reproject(crs, null, 10)
+  var cloud_prob = Sen2Cloud.sen2cloud_prob(control)
+  
+  var NDSI = image1.normalizedDifference(['B3', 'B11']).rename('NDSI');
+  var snow = NDSI.gt(0.45).and(image1.select('B8' ).gt(0.1500))
+                          .and(image1.select('B12').lt(0.12)).rename('snow')
+  var cloud = cloud_prob.select('cloud_prob').gt(0.6).and(snow.eq(0)).rename('cloud_mask')
+  
+  var kernel1 = ee.Kernel.circle({radius:  10, units:  'meters'})
+  var kernel2 = ee.Kernel.circle({radius:  10, units:  'meters'})
+  var cloud = cloud
+          .focal_min({kernel: kernel1, iterations: 2})
+          .focal_max({kernel: kernel2, iterations: 10})
+  
+  var dataset = ee.Image('USGS/GMTED2010');
+  var elevation = dataset.select('be75').clip(image.geometry())
+
+  var thresh = ee.Image(-1.31071432e-05).multiply(elevation).add(elevation.pow(2)
+                                        .multiply(9.92142860e-09)).add(3.80892904e-03)
+  thresh = thresh.add(0.01)//.min(0.35)
+  var b10 = image1.select('B10')//.divide(10000)
+  var cirrus = b10.gt(thresh).rename('cirrus')
+  cloud = cloud.eq(1).or(cirrus.eq(1))
+  
+  return image.updateMask(cloud.eq(0)).updateMask(snow.eq(0))
+}
+
+function s2_add_angs(image){
+  var saa = ee.Image(ee.Number(image.get('MEAN_SOLAR_AZIMUTH_ANGLE'))).rename('saa')
+  var sza = ee.Image(ee.Number(image.get('MEAN_SOLAR_ZENITH_ANGLE' ))).rename('sza')
+  var vza = ee.List([ee.Number(image.get('MEAN_INCIDENCE_ZENITH_ANGLE_B1')),
+                     ee.Number(image.get('MEAN_INCIDENCE_ZENITH_ANGLE_B2')),
+                     ee.Number(image.get('MEAN_INCIDENCE_ZENITH_ANGLE_B3')),
+                     ee.Number(image.get('MEAN_INCIDENCE_ZENITH_ANGLE_B4')),
+                     ee.Number(image.get('MEAN_INCIDENCE_ZENITH_ANGLE_B5')),
+                     ee.Number(image.get('MEAN_INCIDENCE_ZENITH_ANGLE_B6')),
+                     ee.Number(image.get('MEAN_INCIDENCE_ZENITH_ANGLE_B7')),
+                     ee.Number(image.get('MEAN_INCIDENCE_ZENITH_ANGLE_B8')),
+                     ee.Number(image.get('MEAN_INCIDENCE_ZENITH_ANGLE_B8A')),
+                     ee.Number(image.get('MEAN_INCIDENCE_ZENITH_ANGLE_B9')),
+                     ee.Number(image.get('MEAN_INCIDENCE_ZENITH_ANGLE_B10')),
+                     ee.Number(image.get('MEAN_INCIDENCE_ZENITH_ANGLE_B11')),
+                     ee.Number(image.get('MEAN_INCIDENCE_ZENITH_ANGLE_B12')),
+                     ])
+                 
+  var vaa = ee.List([ee.Number(image.get('MEAN_INCIDENCE_AZIMUTH_ANGLE_B1')), 
+                     ee.Number(image.get('MEAN_INCIDENCE_AZIMUTH_ANGLE_B2')),
+                     ee.Number(image.get('MEAN_INCIDENCE_AZIMUTH_ANGLE_B3')), 
+                     ee.Number(image.get('MEAN_INCIDENCE_AZIMUTH_ANGLE_B4')), 
+                     ee.Number(image.get('MEAN_INCIDENCE_AZIMUTH_ANGLE_B5')), 
+                     ee.Number(image.get('MEAN_INCIDENCE_AZIMUTH_ANGLE_B6')), 
+                     ee.Number(image.get('MEAN_INCIDENCE_AZIMUTH_ANGLE_B7')), 
+                     ee.Number(image.get('MEAN_INCIDENCE_AZIMUTH_ANGLE_B8')), 
+                     ee.Number(image.get('MEAN_INCIDENCE_AZIMUTH_ANGLE_B8A')), 
+                     ee.Number(image.get('MEAN_INCIDENCE_AZIMUTH_ANGLE_B9')), 
+                     ee.Number(image.get('MEAN_INCIDENCE_AZIMUTH_ANGLE_B10')), 
+                     ee.Number(image.get('MEAN_INCIDENCE_AZIMUTH_ANGLE_B11')), 
+                     ee.Number(image.get('MEAN_INCIDENCE_AZIMUTH_ANGLE_B12'))
+                     ])
+  var vza = ee.Image.constant(vza.reduce(ee.Reducer.mean())).rename('vza')
+  var vaa = ee.Image.constant(vaa.reduce(ee.Reducer.mean())).rename('vaa')
+  
+  image = image.addBands([sza.float(), saa.float(), vza.float(), vaa.float()])
+  return image
+}
+
+
+var do_ac = function(xap, xbp, xcp, image, band){
+  var band = ee.String(band)
+  var toa = image.select(band).divide(10000)
+  var y = toa.multiply(xap.select(band)).subtract(xbp.select(band))
+  var sur = y.divide(y.multiply(xcp.select(band)).add(1))
+  return sur
+}
+
+var get_sur = function(image){
+  
+  var image = s2_add_angs(image)//s2_view_ang.sen2angle(image)
+  // var image = s2_cloud(image)
+  
+  var geom  = image.geometry()
+  var image_date = image.date()
+  var projection = image.select('B2').projection()
+  var crs = projection.crs()
+  
+  var vza = image.select('vza')
+  var vaa = image.select('vaa')
+  var sza = image.select('sza')
+  var saa = image.select('saa')
+  var raa  = ee.Image(vaa).subtract(saa)//.rename('raa').double()
+  var zero_image = image.select('B2').multiply(0)
+
+  var deg2rad = ee.Number(Math.PI).divide(ee.Number(180.0))
+  var cos_sza = (sza.multiply(deg2rad)).cos().rename('cos_sza')
+  var cos_vza = (vza.multiply(deg2rad)).cos().rename('cos_vza')
+  var cos_raa = (raa.multiply(deg2rad)).cos().rename('cos_raa')
+
+  var tcwv = mcd19_prior.get_wv_prior(image).divide(8).rename('tcwv') //
+  var aot  = mcd19_prior.get_aot_prior(image).divide(3).rename('aot') //
+  // var aot  = AOT.get_aot(image).divide(3).rename('aot') //
+  var tco3 = get_ozone_prior(image).rename('tco3')
+  var ele = ee.Image('USGS/GMTED2010').select('be75').multiply(0.00001).rename('ele')
+  var inp = ee.Image.cat([cos_sza, cos_vza, cos_raa, aot, tcwv, tco3, ele]).reproject(crs, null, 500)
+  
+  var xap = xps.get_xap(inp)
+  var xbp = xps.get_xbp(inp)
+  var xcp = xps.get_xcp(inp)
+  
+  var xap = xap.multiply(ee.Image([21.432022999999997, 19.288629999999998, 23.570948, 14.282488, 12.966325000000001, 11.919912, 9.017822, 8.096992, 10.290405, 5.0013630000000004, 6.812678]))
+                    .add(ee.Image([0.437156, 0.446027, 0.544881, 0.529572, 0.510017, 0.513989, 0.519447, 0.554209, 0.540255, 0.780309, 0.835003]))
+  var xbp = xbp.multiply(ee.Image([8.068029, 6.088372, 4.780875, 3.54993, 3.238609, 3.042271, 2.80878, 2.4387809999999996, 2.599056, 0.895949, 0.5270859999999999]))
+                    .add(ee.Image([0.023714, 0.015876, 0.00949, 0.004827, 0.00382, 0.003152, 0.002511, 0.001704, 0.002037, 0.000146, 4.3e-05]))
+  var xcp = xcp.multiply(ee.Image([0.25760399999999994, 0.22974, 0.230782, 0.222948, 0.218427, 0.211096, 0.201904, 0.185895, 0.19265, 0.09445300000000001, 0.050554] ))
+                    .add(ee.Image([0.073024, 0.050022, 0.030634, 0.015767, 0.012464, 0.010273, 0.008168, 0.005514, 0.006588, 0.000191, 4.2e-05]))
+
+  var B1 = do_ac(xap, xbp, xcp, image, 'B1')
+  var B2 = do_ac(xap, xbp, xcp, image, 'B2')
+  var B3 = do_ac(xap, xbp, xcp, image, 'B3')
+  var B4 = do_ac(xap, xbp, xcp, image, 'B4')
+  var B5 = do_ac(xap, xbp, xcp, image, 'B5')
+  var B6 = do_ac(xap, xbp, xcp, image, 'B6')
+  var B7 = do_ac(xap, xbp, xcp, image, 'B7')
+  var B8 = do_ac(xap, xbp, xcp, image, 'B8')
+  var B8A = do_ac(xap, xbp, xcp, image, 'B8A')
+  var B11 = do_ac(xap, xbp, xcp, image, 'B11')
+  var B12 = do_ac(xap, xbp, xcp, image, 'B12')
+  var sur = ee.Image([B1, B2, B3, B4, B5, B6, B7, B8, B8A, B11, B12]).multiply(10000).int()
+  
+  // var ndvi = sur.normalizedDifference(['B4', 'B8A']).rename('NDVI')
+  var inps = ee.Image.cat([B2, B3, B4, B5, B6, B7, B8A, B11, B12, cos_sza, cos_vza, cos_raa])//.updateMask(ndvi.lt(0.1))
+  
+  var ndvi = (B8.subtract(B4)).divide(B8.add(B4)).rename('ndvi')
+  var lai = NN_prosail.nn_lai(inps)
+  var cab = NN_prosail.nn_cab(inps)
+  var cw  = NN_prosail.nn_cw (inps)
+  // Map.addLayer(inps)
+  
+  // var lai = lai.log().multiply(-2)
+  
+  // log(x) = (a*x^(1/a) - a (a is a large constant)
+  
+  var lai = (lai.pow(0.001).multiply(1000).subtract(1000)).multiply(-2).multiply(1000).int()
+  var cab = (cab.pow(0.001).multiply(1000).subtract(1000)).multiply(-100).multiply(10).int()
+  var cw  = (cw.pow( 0.001).multiply(1000).subtract(1000)).divide(-50).multiply(10000).int()
+  // var lai = lai.log().multiply(-2).multiply(1000).int()
+  // var cab = cab.log().multiply(-100).multiply(10).int()
+  // var cw = cw.log().divide(-50).multiply(10000).int()
+  // Map.addLayer(cab.gt(70).and(lai.lt(1500)))
+  
+  // var inps = ee.Image.cat([B2, B3, B4, B5, B6, B7, B8A, cos_sza, cos_vza, cos_raa])
+  var cbrown = NN_prosail.nn_cbrown(inps).multiply(1000).int()
+  var sur = sur.addBands([lai, cab, cbrown, cw]).max(ee.Image(0))
+  
+  // var sur = sur.addBands(lai)
+  return ee.Image(sur.copyProperties(image).set('system:footprint',  image.get('system:footprint'))
+                                          .set('system:index',      image.get('system:index'))
+                                          .set('system:time_end',   image.get('system:time_end'))
+                                          .set('system:time_start', image.get('system:time_start')))
+  
+}
+exports.get_sur = get_sur
+exports.s2_cloud = s2_cloud
+
+// var image = ee.Image('COPERNICUS/S2/20170227T030651_20170227T031048_T49SFR')
+// // Map.addLayer(image, {min:0, max:2000, bands: ['B4', 'B3', 'B2']})
+// // image = s2_cloud(image)
+// // Map.addLayer(image, {min:0, max:2000, bands: ['B4', 'B3', 'B2']})
+// image = get_sur(image)
+// Map.addLayer(image, {min:0, max:2000, bands: ['B4', 'B3', 'B2']})
+// var palettes = require('users/gena/packages:palettes');
+// var palette = palettes.colorbrewer.Greens[9];
+// Map.addLayer(image.select('cab'), {min:0, max:800, palette: palette})
+
+
+// var geometry = /* color: #0b4a8b */ee.Geometry.Polygon(
+//         [[[112.55294470459796, 32.252621094406784],
+//           [112.55479006440021, 32.25204039410269],
+//           [112.55513338715411, 32.25443575892031],
+//           [112.55307345063068, 32.25470795546917]]]);
+          
+// var reduce_region = function(image){
+//   var year = image.date().get('year')
+//   image = image.updateMask(image.gt(0))
+//   var feat = image.reduceRegion({ reducer: ee.Reducer.mean(),                          
+//                               geometry: geometry,                          
+//                               scale: 10,                         
+//                               maxPixels: 1e13                         
+//                               })
+//   return ee.Feature(null, feat).set({'year': year})
+// }
+// var obs = reduce_region(image)
+
+// print(obs)
+
+
+
